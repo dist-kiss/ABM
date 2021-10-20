@@ -1,0 +1,1 @@
+![Agents moving around in the model](./abm.gif)
