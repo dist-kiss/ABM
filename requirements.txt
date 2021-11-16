@@ -1,9 +1,0 @@
-numpy==1.17.4
-pyrosm==0.6.0
-Shapely==1.7.1
-agentpy==0.1.4
-networkx==2.6.3
-osmnx==1.1.1
-matplotlib==3.4.3
-ipython==7.28.0
-folium==0.12.1
