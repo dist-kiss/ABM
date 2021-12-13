@@ -3,7 +3,6 @@ import agentpy as ap
 import networkx as nx
 from shapely.geometry import Point, LineString
 from shapely.ops import split, nearest_points, snap
-import copy
 import geopandas
 from pandas import concat
 import momepy
@@ -130,7 +129,10 @@ class Pedestrian(ap.Agent):
             
             if(self.leftover_distance == 0):
                 if(self.check_next_street_segment(current_edge)):
-                    return
+                    next_node = self.model.nodes.loc[[self.metric_path[1]]]
+                    edge_data = self.model.G.get_edge_data(self.metric_path[0],self.metric_path[1])
+                    current_edge = list(edge_data.values())[0]
+                    # return
             
             # check if linestring starts at current node (and ends at next node)
             if(current_edge['geometry'].coords[0] != self.model.nodes.loc[self.model.nodes['nodeID'] == self.metric_path[0]]['geometry'].values[0].coords[0]):
@@ -142,7 +144,6 @@ class Pedestrian(ap.Agent):
             if(self.leftover_distance != 0):
                 distance_to_next_point = self.leftover_distance
             else:
-                self.check_next_street_segment(current_edge)
                 distance_to_next_point = current_edge['mm_len']
                 for key in self.model.G[self.metric_path[0]][self.metric_path[1]]._atlas:
                     self.model.G[self.metric_path[0]][self.metric_path[1]][key]['temp_ppl_increase']+=1
@@ -174,7 +175,14 @@ class Pedestrian(ap.Agent):
         # TODO: implement this function!
         # print(edge['ppl_count'])
         if(edge['ppl_count'] > self.density_threshold):
+            edge["walkable"] = False
+            def filter_edge(n1, n2, key):
+                # print(self.model.G[n1][n2][key].get("cross_me", True))
+                return self.model.G[n1][n2][key].get("walkable", True)
+            view = nx.subgraph_view(self.model.G, filter_edge=filter_edge)
             print(self.id)
+            self.metric_path = nx.dijkstra_path(view, source=self.metric_path[0], target=self.metric_path[-1], weight='mm_len')
+            edge["walkable"] = True
             return True
         else: 
             return False
@@ -251,7 +259,7 @@ class MyModel(ap.Model):
         # store all the agents current location in list 
         self.positions = self.agents.location.copy()
         for agent_position in self.positions:
-            agent_position['time']= datetime.datetime(2000, 1, 1, self.step_counter * self.model.p.duration // 360, self.step_counter * self.model.p.duration // 60, self.step_counter * self.model.p.duration % 60)
+            agent_position['time']= datetime.datetime(2000, 1, 1, self.step_counter * self.model.p.duration // 3600, self.step_counter * self.model.p.duration // 60, self.step_counter * self.model.p.duration % 60)
             agent_position['counter']= self.step_counter
             self.gdf.append(agent_position)
 
@@ -264,7 +272,7 @@ class MyModel(ap.Model):
 # specify some parameters
 parameters = {
     'agents': 100,
-    'steps': 60,
+    'steps': 100,
     'viz': False,
     'duration': 5
 }
