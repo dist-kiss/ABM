@@ -123,15 +123,15 @@ class Pedestrian(ap.Agent):
         else:
 
             # calculate the distance the agent passes by during the current timestep, to prevent agent from walking further than the next node
+            if(self.leftover_distance == 0):
+                self.metric_path_backup = self.metric_path.copy()
+                if not (self.check_next_street_segment()):
+                    self.metric_path = self.metric_path_backup
+                    return
+                        
             next_node = self.model.nodes.loc[[self.metric_path[1]]]
             edge_data = self.model.G.get_edge_data(self.metric_path[0],self.metric_path[1])
             current_edge = list(edge_data.values())[0]
-            
-            if(self.leftover_distance == 0):
-                if(self.check_next_street_segment(current_edge)):
-                    next_node = self.model.nodes.loc[[self.metric_path[1]]]
-                    edge_data = self.model.G.get_edge_data(self.metric_path[0],self.metric_path[1])
-                    current_edge = list(edge_data.values())[0]
                     # return
             
             # check if linestring starts at current node (and ends at next node)
@@ -167,13 +167,13 @@ class Pedestrian(ap.Agent):
                 self.leftover_distance = distance_to_next_point - self.walking_distance
                 return
     
-    def check_next_street_segment(self, edge):
+    def check_next_street_segment(self):
         """
             Check whether the next street segement is too crowded or has an intervention that stops the agent from accessing it.
             If there is an obstacle, recalculates the agents path and overwrites the previous path.
         """
-        # TODO: implement this function!
-        # print(edge['ppl_count'])
+        edge_data = self.model.G.get_edge_data(self.metric_path[0],self.metric_path[1])
+        edge = list(edge_data.values())[0]
         if(edge['ppl_count'] > self.density_threshold):
             edge["walkable"] = False
             def filter_edge(n1, n2, key):
@@ -181,14 +181,20 @@ class Pedestrian(ap.Agent):
                 return self.model.G[n1][n2][key].get("walkable", True)
             view = nx.subgraph_view(self.model.G, filter_edge=filter_edge)
             print(self.id)
-            self.metric_path = nx.dijkstra_path(view, source=self.metric_path[0], target=self.metric_path[-1], weight='mm_len')
-            edge["walkable"] = True
+            try:
+                self.metric_path = nx.dijkstra_path(view, source=self.metric_path[0], target=self.metric_path[-1], weight='mm_len')
+                path_free = self.check_next_street_segment()
+                edge["walkable"] = True
+                return path_free
+                
+            except (nx.NetworkXNoPath) as e:
+                print("Agent " + str(self.id) + ' needs to wait at current node.')
+                edge["walkable"] = True
+                return False
+        else:
             return True
-        else: 
-            return False
-        
-        # if(next_edge['people_count'] > self.people_count):
             
+                
             
         
 class MyModel(ap.Model):
@@ -271,7 +277,7 @@ class MyModel(ap.Model):
 
 # specify some parameters
 parameters = {
-    'agents': 100,
+    'agents': 250,
     'steps': 100,
     'viz': False,
     'duration': 5
