@@ -238,6 +238,8 @@ class MyModel(ap.Model):
         
         # Store list of inital paths into global list  
         self.gdf = []
+        self.edge_gdf = []
+        
 
                     
     def step(self):
@@ -268,16 +270,25 @@ class MyModel(ap.Model):
             agent_position['time']= datetime.datetime(2000, 1, 1, self.step_counter * self.model.p.duration // 3600, self.step_counter * self.model.p.duration // 60, self.step_counter * self.model.p.duration % 60)
             agent_position['counter']= self.step_counter
             self.gdf.append(agent_position)
+        # store edge information in dataframe
+        time = datetime.datetime(2000, 1, 1, self.step_counter * self.model.p.duration // 3600, self.step_counter * self.model.p.duration // 60, self.step_counter * self.model.p.duration % 60)
+        nx.set_edge_attributes(self.model.G, self.step_counter, "counter")
+        nx.set_edge_attributes(self.model.G, time, "time")
+        edges = momepy.nx_to_gdf(self.model.G, points=False)
+        self.edge_gdf.append(edges)
+        # nx.write_shp(self.model.G, './output/edges_'+str(self.step_counter))         
 
     def end(self):
         """ Report an evaluation measure. """
         final_gdf = concat(self.gdf, ignore_index=True)
-        final_gdf.to_file('./output/positions.gpkg', driver='GPKG', layer='Agents_Timesteps')  
+        final_gdf.to_file('./output/positions.gpkg', driver='GPKG', layer='Agents_Timesteps') 
+        final_edge_gdf = concat(self.edge_gdf, ignore_index=True)
+        final_edge_gdf.to_file('./output/edges.gpkg', driver='GPKG', layer='Edges_Timestamps') 
 
 
 # specify some parameters
 parameters = {
-    'agents': 250,
+    'agents': 100,
     'steps': 100,
     'viz': False,
     'duration': 5
