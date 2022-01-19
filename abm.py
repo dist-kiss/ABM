@@ -194,6 +194,23 @@ class Pedestrian(ap.Agent):
                 print("Agent " + str(self.id) + ' needs to wait at current node.')
                 edge["walkable"] = True
                 return False
+        elif(edge['one_way']):
+            edge["walkable"] = False
+            def filter_edge(n1, n2, key):
+                # print(self.model.G[n1][n2][key].get("cross_me", True))
+                return self.model.G[n1][n2][key].get("walkable", True)
+            view = nx.subgraph_view(self.model.G, filter_edge=filter_edge)
+            print("oneway_street" + str(self.id))
+            try:
+                self.metric_path = nx.dijkstra_path(view, source=self.metric_path[0], target=self.metric_path[-1], weight='mm_len')
+                path_free = self.check_next_street_segment()
+                edge["walkable"] = True
+                return path_free
+                
+            except (nx.NetworkXNoPath) as e:
+                print("Agent " + str(self.id) + ' needs to wait at current node - intervention.')
+                edge["walkable"] = True
+                return False
         else:
             return True
             
@@ -216,7 +233,7 @@ class MyModel(ap.Model):
         self.G = momepy.node_degree(self.G, name='degree')
         # Convert graph back to GeoDataFrames with nodes and edges
         self.nodes, self.edges, sw = momepy.nx_to_gdf(self.G, points=True, lines=True, spatial_weights=True)
-        # set index column, and rename nodes in graph 
+        # set index column, and rename nodes in graph
         # print(self.nodes)
         self.nodes = self.nodes.set_index("nodeID", drop=False)
         self.nodes = self.nodes.rename_axis([None])
@@ -226,6 +243,7 @@ class MyModel(ap.Model):
         nx.set_edge_attributes(self.G, 0, "temp_ppl_increase")
         nx.set_edge_attributes(self.G, 0, "temp_ppl_decrease")
         nx.set_edge_attributes(self.G, 0, "ppl_total")
+        # nx.set_edge_attributes(self.G, False, "oneway_from")
         # opt. visualize network nodes, edges and degree values
         if self.p.viz:
             f, ax = plt.subplots(figsize=(10, 10))
