@@ -40,6 +40,7 @@ class Pedestrian(ap.Agent):
         # Set current location to the origin node
         self.location = self.model.nodes.loc[[self.orig_node_id]]
         self.location['agentID'] = self.id
+        self.location['finished'] = False
         self.location['density_threshold'] = self.density_threshold
                 
         # Compute shortest path to destination
@@ -119,6 +120,7 @@ class Pedestrian(ap.Agent):
         """
         # if path is shorter than 2, destination is reached, return
         if len(self.metric_path) < 2:
+            self.location['finished'] = True
             return 
         else:
 
