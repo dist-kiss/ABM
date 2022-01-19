@@ -149,6 +149,7 @@ class Pedestrian(ap.Agent):
                 distance_to_next_point = current_edge['mm_len']
                 for key in self.model.G[self.metric_path[0]][self.metric_path[1]]._atlas:
                     self.model.G[self.metric_path[0]][self.metric_path[1]][key]['temp_ppl_increase']+=1
+                    self.model.G[self.metric_path[0]][self.metric_path[1]][key]['ppl_total']+=1
                 
             # check if pedestrian would walk past next node, in that case:
             if distance_to_next_point < self.walking_distance:                
@@ -228,6 +229,7 @@ class MyModel(ap.Model):
         nx.set_edge_attributes(self.G, 0, "ppl_count")
         nx.set_edge_attributes(self.G, 0, "temp_ppl_increase")
         nx.set_edge_attributes(self.G, 0, "temp_ppl_decrease")
+        nx.set_edge_attributes(self.G, 0, "ppl_total")
         # opt. visualize network nodes, edges and degree values
         if self.p.viz:
             f, ax = plt.subplots(figsize=(10, 10))
