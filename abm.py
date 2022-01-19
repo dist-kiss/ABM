@@ -220,10 +220,6 @@ class MyModel(ap.Model):
         # print(self.nodes)
         self.nodes = self.nodes.set_index("nodeID", drop=False)
         self.nodes = self.nodes.rename_axis([None])
-        sorted(self.G)
-        # print(self.nodes['nodeID'])
-        varX= self.nodes.index[self.nodes['nodeID']-1].tolist()
-        varY = [(geom.x, geom.y) for geom in self.nodes['geometry'].tolist()]
         mapping = dict(zip([(geom.x, geom.y) for geom in self.nodes['geometry'].tolist()], self.nodes.index[self.nodes['nodeID']-1].tolist()))
         self.G = nx.relabel_nodes(self.G, mapping)
         nx.set_edge_attributes(self.G, 0, "ppl_count")
@@ -259,15 +255,12 @@ class MyModel(ap.Model):
         ppl_count=dict(ppl_count)
         nx.set_edge_attributes(self.model.G, ppl_count, "ppl_count")
         nx.set_edge_attributes(self.model.G, 0, "temp_ppl_increase")
-        # for x in self.model.G.edges(data=True,keys=True):
-        #     x[3]['ppl_count'] = x[3]['ppl_count'] + x[3]['temp_ppl_increase'] 
-        #     # - x[3]['temp_ppl_decrease']
-        #     x[3]['temp_ppl_increase'] = 0
-        #     # x[3]['temp_ppl_decrease'] = 0
+
         """ Record a dynamic variable. """
         # TODO: Record agents position as shapefile
         self.agents.record('metric_path')
         self.model.record('G')
+        
         # store all the agents current location in list 
         self.positions = self.agents.location.copy()
         for agent_position in self.positions:
@@ -280,7 +273,6 @@ class MyModel(ap.Model):
         nx.set_edge_attributes(self.model.G, time, "time")
         edges = momepy.nx_to_gdf(self.model.G, points=False)
         self.edge_gdf.append(edges)
-        # nx.write_shp(self.model.G, './output/edges_'+str(self.step_counter))         
 
     def end(self):
         """ Report an evaluation measure. """
