@@ -1,6 +1,7 @@
 # Model design
 import agentpy as ap
 import networkx as nx
+from numpy import random
 from shapely.geometry import Point, LineString
 from shapely.ops import split, nearest_points, snap
 import geopandas
@@ -26,6 +27,8 @@ class Pedestrian(ap.Agent):
         self.density_threshold = round(5 + rng.random() * 5)
         self.metric_path = []
         self.leftover_distance = 0
+        self.network = self.model.G.to_directed()
+        self.ows_threshold = rng.random()
         
         # Choose random origin within boundaries of Quakenbrueck
         self.orig, self.dest = self.generate_random_orig_dest(self.model.area_polygon, 250)
@@ -42,7 +45,7 @@ class Pedestrian(ap.Agent):
         self.location['agentID'] = self.id
         self.location['finished'] = False
         self.location['density_threshold'] = self.density_threshold
-                
+        
         # Compute shortest path to destination
         self.agent_compute_path()
 
@@ -132,8 +135,7 @@ class Pedestrian(ap.Agent):
                     return
                         
             next_node = self.model.nodes.loc[[self.metric_path[1]]]
-            edge_data = self.model.G.get_edge_data(self.metric_path[0],self.metric_path[1])
-            current_edge = list(edge_data.values())[0]
+            current_edge = self.model.G.get_edge_data(self.metric_path[0],self.metric_path[1])
                     # return
             
             # check if linestring starts at current node (and ends at next node)
@@ -147,17 +149,14 @@ class Pedestrian(ap.Agent):
                 distance_to_next_point = self.leftover_distance
             else:
                 distance_to_next_point = current_edge['mm_len']
-                for key in self.model.G[self.metric_path[0]][self.metric_path[1]]._atlas:
-                    self.model.G[self.metric_path[0]][self.metric_path[1]][key]['temp_ppl_increase']+=1
-                    self.model.G[self.metric_path[0]][self.metric_path[1]][key]['ppl_total']+=1
+                self.model.G[self.metric_path[0]][self.metric_path[1]]['temp_ppl_increase']+=1
+                self.model.G[self.metric_path[0]][self.metric_path[1]]['ppl_total']+=1
                 
             # check if pedestrian would walk past next node, in that case:
             if distance_to_next_point < self.walking_distance:                
                 # set current node to location of next node
                 self.leftover_distance = 0
-                for key in self.model.G[self.metric_path[0]][self.metric_path[1]]._atlas:
-                    # self.model.G[self.metric_path[0]][self.metric_path[1]][key]['temp_ppl_decrease']+=1
-                    self.model.G[self.metric_path[0]][self.metric_path[1]][key]['temp_ppl_increase']-=1
+                self.model.G[self.metric_path[0]][self.metric_path[1]]['temp_ppl_increase']-=1
                 self.metric_path.pop(0)
                 self.location = next_node
                 self.location['agentID'] = self.id
@@ -175,48 +174,69 @@ class Pedestrian(ap.Agent):
             Check whether the next street segement is too crowded or has an intervention that stops the agent from accessing it.
             If there is an obstacle, recalculates the agents path and overwrites the previous path.
         """
-        edge_data = self.model.G.get_edge_data(self.metric_path[0],self.metric_path[1])
-        edge = list(edge_data.values())[0]
+        edge = self.model.G.get_edge_data(self.metric_path[0],self.metric_path[1])
         if(edge['ppl_count'] > self.density_threshold):
-            edge["walkable"] = False
-            def filter_edge(n1, n2, key):
-                # print(self.model.G[n1][n2][key].get("cross_me", True))
-                return self.model.G[n1][n2][key].get("walkable", True)
-            view = nx.subgraph_view(self.model.G, filter_edge=filter_edge)
-            print(self.id)
-            try:
-                self.metric_path = nx.dijkstra_path(view, source=self.metric_path[0], target=self.metric_path[-1], weight='mm_len')
-                path_free = self.check_next_street_segment()
-                edge["walkable"] = True
-                return path_free
-                
-            except (nx.NetworkXNoPath) as e:
-                print("Agent " + str(self.id) + ' needs to wait at current node.')
-                edge["walkable"] = True
-                return False
+            return self.density_evaluation()
         elif(edge['one_way']):
-            edge["walkable"] = False
-            def filter_edge(n1, n2, key):
-                # print(self.model.G[n1][n2][key].get("cross_me", True))
-                return self.model.G[n1][n2][key].get("walkable", True)
-            view = nx.subgraph_view(self.model.G, filter_edge=filter_edge)
+            return self.ows_evaluation()
+        else:
+            return True
+
+    def density_evaluation(self):
+        # x = random.rand()
+        x = 0
+        if(x<self.density_threshold):
+            return self.adhere_crowdedness()
+        else:
+            return self.ignore_obstacle()    
+
+    def ows_evaluation(self):
+        # x = random.rand()
+        x = 0
+        if(x<self.ows_threshold):
+            return self.adhere_ow()
+        else:
+            return self.ignore_obstacle()   
+            
+    def ignore_obstacle(self):            
+        return True
+        
+    def adhere_crowdedness(self): 
+        self.network[self.metric_path[0]][self.metric_path[1]]["walkable"] = False
+        def filter_edge(n1, n2):
+            return self.network[n1][n2].get("walkable", True)
+        view = nx.subgraph_view(self.network, filter_edge=filter_edge)
+        current_node = self.metric_path[0]
+        next_node = self.metric_path[1]
+        print(self.id)
+        try:
+            self.metric_path = nx.dijkstra_path(view, source=self.metric_path[0], target=self.metric_path[-1], weight='mm_len')
+            path_free = self.check_next_street_segment()
+            self.network[current_node][next_node]["walkable"] = True
+            return path_free
+            
+        except (nx.NetworkXNoPath) as e:
+            print("Agent " + str(self.id) + ' needs to wait at current node.')
+            self.network[current_node][next_node]["walkable"] = True
+            return False
+
+    def adhere_ow(self):
+            if (self.network.has_edge(self.metric_path[0],self.metric_path[1])):
+                self.network.remove_edge(self.metric_path[0],self.metric_path[1])
+            def filter_edge(n1, n2):
+                return self.network[n1][n2].get("walkable", True)
+            view = nx.subgraph_view(self.network, filter_edge=filter_edge)
             print("oneway_street" + str(self.id))
             try:
                 self.metric_path = nx.dijkstra_path(view, source=self.metric_path[0], target=self.metric_path[-1], weight='mm_len')
                 path_free = self.check_next_street_segment()
-                edge["walkable"] = True
                 return path_free
                 
             except (nx.NetworkXNoPath) as e:
-                print("Agent " + str(self.id) + ' needs to wait at current node - intervention.')
-                edge["walkable"] = True
+                print("Agent " + str(self.id) + ' last option is blocked by intervention.')
                 return False
-        else:
-            return True
-            
-                
-            
-        
+
+
 class MyModel(ap.Model):
 
     def setup(self):
@@ -228,13 +248,12 @@ class MyModel(ap.Model):
         # Read street network as geopackage and convert it to GeoDataFrame
         streets = geopandas.read_file("./network-data/quakenbrueck_clean.gpkg")
         # Transform GeoDataFrame to networkx Graph
-        self.G = momepy.gdf_to_nx(streets, approach='primal')
+        self.G = nx.Graph(momepy.gdf_to_nx(streets, approach='primal'))
         # Calculate degree of nodes
         self.G = momepy.node_degree(self.G, name='degree')
         # Convert graph back to GeoDataFrames with nodes and edges
         self.nodes, self.edges, sw = momepy.nx_to_gdf(self.G, points=True, lines=True, spatial_weights=True)
         # set index column, and rename nodes in graph
-        # print(self.nodes)
         self.nodes = self.nodes.set_index("nodeID", drop=False)
         self.nodes = self.nodes.rename_axis([None])
         mapping = dict(zip([(geom.x, geom.y) for geom in self.nodes['geometry'].tolist()], self.nodes.index[self.nodes['nodeID']-1].tolist()))
