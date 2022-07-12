@@ -11,7 +11,8 @@ Agents traverse the street network along the shortest path until they reach thei
 The output of the model with paramters set to 50 agents and 20 timesteps currently looks (similar) as shown below: 
 
 
-https://user-images.githubusercontent.com/18304291/178452066-b1c3af4a-78f3-4963-8771-2fabd7ac089b.mp4
+https://user-images.githubusercontent.com/18304291/178452162-f5b95d39-ead1-4f77-8a69-caeb81020c15.mp4
+
 
 
 
