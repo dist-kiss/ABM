@@ -10,6 +10,9 @@ If they pass by a street node during walking they wait until the current timeste
 Agents traverse the street network along the shortest path until they reach their destination. Each agent has a random density-tolerance-thrshold between 5-10 assigned. Before the agent walks onto the next street segment it checks whether the amount of agents currently on that street is higher than its density-tolerance-threshold. If so, the agent waits at its position until the numebr is lower than the threshold, else he continues traversing its path. If it has reached the destination it stays at that location. 
 The output of the model with paramters set to 50 agents and 20 timesteps currently looks (similar) as shown below: 
 
-https://user-images.githubusercontent.com/18304291/141971630-077c91e2-3160-4ff3-b468-6ef6c5ac0d7c.mp4
+
+https://user-images.githubusercontent.com/18304291/178452066-b1c3af4a-78f3-4963-8771-2fabd7ac089b.mp4
+
+
 
 This is a test.
