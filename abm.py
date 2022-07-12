@@ -142,7 +142,7 @@ class Pedestrian(ap.Agent):
             self.leftover_distance = self.leftover_distance - self.walking_distance
             self.location['geometry'] = current_directed_edge['geometry'].interpolate(current_directed_edge['mm_len'] - self.leftover_distance)
             return
-
+            
     
     def check_next_street_segment(self):
         """Checks whether the next street segement has an intervention 
@@ -284,6 +284,7 @@ class MyModel(ap.Model):
     def setup(self):
         self.create_area(area_shp=self.p.area_path, crs='EPSG:3857')
         self.create_graph(streets_gpkg=self.p.streets_path)
+        
         # opt. visualize network nodes, edges and degree values
         if self.p.viz:
             self.visualize_model()
