@@ -14,9 +14,8 @@ import matplotlib.pyplot as plt
 
 # TODO: 
 # - use results of the study to calibrate the ows threshold
-# - add patience_threshold that reduces the willingness to comply over time spend or detours taken
-# - DONE: consider remaining path lengths when making decision on when to comply or not to comply
-# - fix directed one way streets 
+# - add probability to take another path (without intervention)
+# - sensitivity analysis -> parameters vs. relative detour | mean & sd compliance rates
 
 class Pedestrian(ap.Agent):
 
@@ -29,12 +28,13 @@ class Pedestrian(ap.Agent):
         self.rng = random.Random(seed)
         
         # Initialize attributes
-        self.walking_speed = self.rng.random() + 1
+        # TODO: normal distribution around 1.4 (check literature)
+        self.walking_speed = self.rng.random() + 1 
         self.walking_distance = self.walking_speed * self.model.p.duration
-        self.density_threshold = round( 0.03 + self.rng.random() * 0.07, 4)
         self.network = self.model.G.to_directed()
-        self.ows_threshold = 0.75 + self.rng.random() * 0.25
-        self.detour_threshold = 0.75 + self.rng.random() * 0.25
+        self.density_threshold = round( 0.03 + self.rng.random() * 0.07, 4)
+        # self.ows_threshold = 0.75 + self.rng.random() * 0.25
+        # self.detour_threshold = 0.75 + self.rng.random() * 0.25
         self.ovr_risk_tolerance = 0.8 + self.rng.random() * 0.2
 
         # Initialize variables 
@@ -43,6 +43,7 @@ class Pedestrian(ap.Agent):
         self.leftover_distance = 0
 
         # Choose random origin and destination within boundaries of graph area
+        # TODO: calculate point snap to line 
         self.orig, self.dest = movement.generate_random_orig_dest(self.model.area_polygon, 250, self.rng)
                 
         # Find the closest nodes in the network for origin and destination
@@ -176,25 +177,26 @@ class Pedestrian(ap.Agent):
         Returns:
             Boolean: True if the agent complies with the intervention, False if it does not comply
         """
+        # TODO: Look at regression and how to potentially use it for the evaluation part
         x = self.rng.random() * 100
-        prop_compliance = 0
+        prop_noncompliance = 0
         norm_detour = detour/self.metric_path_length
         detour
-        prop_compliance += detour * self.model.p.detour_weight
-        prop_compliance += norm_detour * self.model.p.remaining_length_weight
+        prop_noncompliance += detour * self.model.p.detour_weight
+        prop_noncompliance += norm_detour * self.model.p.remaining_length_weight
         if(self.model.p.density):
-            prop_compliance += edge['density'] * self.model.p.density_weight 
+            prop_noncompliance += edge['density'] * self.model.p.density_weight 
             # self.density_threshold?
         if(self.model.p.impatience):
-            prop_compliance += self.num_detours * self.model.p.impatience_weight
-        prop_compliance = prop_compliance * self.ovr_risk_tolerance
-        if(x > prop_compliance):
+            prop_noncompliance += self.num_detours * self.model.p.impatience_weight
+        prop_noncompliance = prop_noncompliance * self.ovr_risk_tolerance
+        if(x > prop_noncompliance):
             # print("Compliance, " + str(self.id))
             self.location['compliance'] = True
             self.model.compliances += 1
             return True
         else:
-            print("P: " + str(prop_compliance) + "; X: " + str(x))
+            print("P: " + str(prop_noncompliance) + "; X: " + str(x))
             self.location['non-compliance'] = True
             self.model.non_compliances += 1
             print("Non-Compliance, " + str(self.id))
@@ -297,7 +299,7 @@ class MyModel(ap.Model):
         self.edge_gdf = []
         self.compliances = 0
         self.non_compliances = 0
-        self.step_counter = 0 
+        self.step_counter = 0
 
                     
     def step(self):
@@ -317,6 +319,7 @@ class MyModel(ap.Model):
         density = dict(Counter({key : ppl_count[key] / length[key] for key in ppl_count}))
         ppl_count.update(temp_count)
         ppl_count=dict(ppl_count)
+        self.max_density = {k:max(density.get(k,float('-inf')), self.max_density.get(k, float('-inf'))) for k in density.keys()}
         nx.set_edge_attributes(self.model.G, ppl_count, "ppl_count")
         nx.set_edge_attributes(self.model.G, density, "density")
         nx.set_edge_attributes(self.model.G, 0, "temp_ppl_increase")
@@ -344,11 +347,18 @@ class MyModel(ap.Model):
 
     def end(self):
         """ Report an evaluation measure. """
+        # output density maximum per street
+        nx.set_edge_attributes(self.model.G, self.max_density, "max_density")
+        max_density_gdf = momepy.nx_to_gdf(self.model.G, points=False)
+        max_density_gdf.to_file('./output/max_density.gpkg', driver='GPKG', layer='Max Density Edges') 
+        # output position data as gpkg 
         all_positions = DataFrame(self.position_list) 
         final_gdf = geopandas.GeoDataFrame(all_positions, geometry=all_positions['geometry'], crs="EPSG:3857")
         final_gdf.to_file('./output/positions.gpkg', driver='GPKG', layer='Agents_temporal') 
+        # output edge data as gpkg 
         final_edge_gdf = concat(self.edge_gdf, ignore_index=True)
         final_edge_gdf.to_file('./output/edges.gpkg', driver='GPKG', layer='Edges_temporal')
+        # print compliance statistics         
         print("Compliances: " + str(self.compliances) + "; Non-Compliances: " + str(self.non_compliances))
 
     def visualize_model(self):
@@ -397,6 +407,9 @@ class MyModel(ap.Model):
         nx.set_edge_attributes(self.G, 0, "temp_ppl_decrease")
         nx.set_edge_attributes(self.G, 0, "ppl_total")
         nx.set_edge_attributes(self.G, 0, "density")
+        density = nx.get_edge_attributes(self.G, "density")
+        self.max_density = density
+        nx.set_edge_attributes(self.G, 0, "max_density")
         # nx.set_edge_attributes(self.G, False, "oneway_from")
 
 
