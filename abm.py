@@ -8,6 +8,8 @@ import momepy
 import datetime
 from collections import Counter
 import movement
+import math
+
 
 # Visualization
 import matplotlib.pyplot as plt 
@@ -41,6 +43,7 @@ class Pedestrian(ap.Agent):
         self.num_detours = 0
         self.metric_path = []
         self.leftover_distance = 0
+        self.len_traversed = 0
 
         # Choose random origin and destination within boundaries of graph area
         # TODO: calculate point snap to line 
@@ -125,6 +128,8 @@ class Pedestrian(ap.Agent):
 
         # if pedestrian would walk past next node stop at next node instead 
         if  self.walking_distance > self.leftover_distance:
+            # increase length traversed by leftover distance
+            self.len_traversed += self.leftover_distance
             # reset leftover distance
             self.leftover_distance = 0
             # reduce people counter of current edge
@@ -136,13 +141,13 @@ class Pedestrian(ap.Agent):
             # update location of agent
             new_location_node = self.model.nodes.loc[[self.metric_path[0]]].to_dict(orient='records')[0]
             self.location.update( [('nodeID', new_location_node['nodeID']),('geometry', new_location_node['geometry'])] )
-            return
         # if next node is not reached go on with calculation of next position
         else:
+            # increase length traversed by walking_distance
+            self.len_traversed += self.walking_distance
             # update location of agent using walking distance within current timestep
             self.leftover_distance = self.leftover_distance - self.walking_distance
             self.location['geometry'] = current_directed_edge['geometry'].interpolate(current_directed_edge['mm_len'] - self.leftover_distance)
-            return
             
     
     def check_next_street_segment(self):
@@ -178,12 +183,15 @@ class Pedestrian(ap.Agent):
             Boolean: True if the agent complies with the intervention, False if it does not comply
         """
         # TODO: Look at regression and how to potentially use it for the evaluation part
-        x = self.rng.random() * 100
-        prop_noncompliance = 0
-        norm_detour = detour/self.metric_path_length
-        detour
-        prop_noncompliance += detour * self.model.p.detour_weight
-        prop_noncompliance += norm_detour * self.model.p.remaining_length_weight
+        x = self.rng.random()
+        forbidden = 1
+        rel_tot_detour = detour/(self.len_traversed + self.metric_path_length)
+        z = 0.1899 + rel_tot_detour * 3.8243 - forbidden * 1.2794 
+        prop_noncompliance = 1/(1+ math.exp(-z))
+        # norm_detour = detour/self.metric_path_length
+        # # detour
+        # prop_noncompliance += detour * self.model.p.detour_weight
+        # prop_noncompliance += norm_detour * self.model.p.remaining_length_weight
         if(self.model.p.density):
             prop_noncompliance += edge['density'] * self.model.p.density_weight 
             # self.density_threshold?
@@ -399,12 +407,11 @@ class MyModel(ap.Model):
         # set index column, and rename nodes in graph
         self.nodes = self.nodes.set_index("nodeID", drop=False)
         self.nodes = self.nodes.rename_axis([None])
-        self.G = nx.convert_node_labels_to_integers(self.G, first_label=1, ordering='default', label_attribute=None)
+        self.G = nx.convert_node_labels_to_integers(self.G, first_label=0, ordering='default', label_attribute=None)
         # mapping = dict(zip([(geom.x, geom.y) for geom in self.nodes['geometry'].tolist()], self.nodes.index[self.nodes['nodeID']-1].tolist()))
         # self.G = nx.relabel_nodes(self.G, mapping)
         nx.set_edge_attributes(self.G, 0, "ppl_count")
         nx.set_edge_attributes(self.G, 0, "temp_ppl_increase")
-        nx.set_edge_attributes(self.G, 0, "temp_ppl_decrease")
         nx.set_edge_attributes(self.G, 0, "ppl_total")
         nx.set_edge_attributes(self.G, 0, "density")
         density = nx.get_edge_attributes(self.G, "density")
@@ -415,13 +422,13 @@ class MyModel(ap.Model):
 
 # specify model parameters
 parameters = {
-    'agents': 200,
+    'agents': 400,
     'steps': 100,
     'viz': False,
     'duration': 5,
     'density': False,
     'impatience': False,
-    'seed': 41,
+    'seed': 40,
     'detour_weight': 0.1,
     'remaining_length_weight': 50,
     'density_weight': 1,
