@@ -30,8 +30,8 @@ class Pedestrian(ap.Agent):
         self.rng = random.Random(seed)
         
         # Initialize attributes
-        # TODO: normal distribution around 1.4 (check literature)
-        self.walking_speed = self.rng.random() + 1 
+        # walking speed is based on average walking speed and its standard deviation
+        self.walking_speed = self.rng.gauss(1.25, 0.21)
         self.walking_distance = self.walking_speed * self.model.p.duration
         self.network = self.model.G.to_directed()
         self.density_threshold = round( 0.03 + self.rng.random() * 0.07, 4)
@@ -422,8 +422,8 @@ class MyModel(ap.Model):
 
 # specify model parameters
 parameters = {
-    'agents': 400,
-    'steps': 100,
+    'agents': 40,
+    'steps': 10,
     'viz': False,
     'duration': 5,
     'density': False,
