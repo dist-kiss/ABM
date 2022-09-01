@@ -1,2 +1,5 @@
 /misc
 /conference_animation
+/output
+__pycache__/
+.DS_Store
