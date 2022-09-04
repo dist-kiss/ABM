@@ -31,6 +31,7 @@ class Pedestrian(ap.Agent):
         
         # Initialize attributes
         # walking speed is based on average walking speed and its standard deviation
+        # Source: Satish Chandra and Anish Khumar Bharti 2013, p. 662, "Speed Distribution Curves for Pedestrians during Walking and Crossing"
         self.walking_speed = self.rng.gauss(1.25, 0.21)
         self.walking_distance = self.walking_speed * self.model.p.duration
         self.network = self.model.G.to_directed()
