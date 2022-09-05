@@ -423,8 +423,8 @@ class MyModel(ap.Model):
 
 # specify model parameters
 parameters = {
-    'agents': 40,
-    'steps': 10,
+    'agents': 400,
+    'steps': 100,
     'viz': False,
     'duration': 5,
     'density': False,
