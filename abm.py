@@ -16,7 +16,6 @@ import matplotlib.pyplot as plt
 
 # TODO: 
 # - use results of the study to calibrate the ows threshold
-# - add probability to take another path (without intervention)
 # - sensitivity analysis -> parameters vs. relative detour | mean & sd compliance rates
 
 class Pedestrian(ap.Agent):
@@ -120,6 +119,7 @@ class Pedestrian(ap.Agent):
         """
         self.location['non-compliance'] = False
         self.location['compliance'] = False 
+        self.location['random_rerouting'] = False
     
     def not_reached_destination(self):
         """Checks whether agent has not reached its destination yet and returns boolean.
@@ -141,7 +141,7 @@ class Pedestrian(ap.Agent):
             # agent left last edges, so reset compliance attributes
             self.reset_location_compliance()
 
-            # evaluate next street segment regarding interventions 
+            # evaluate next street segment regarding interventions. If there is no intervention, evaluate to randomly reroute.
             self.check_next_street_segment()
             
             # get next edge and set agent leftover distance and edge attributes
@@ -216,11 +216,31 @@ class Pedestrian(ap.Agent):
             alt_path, detour = self.get_alternative_path(self.metric_path, self.metric_path_length)
             # if (alt_path ==  self.metric_path):
             #     return True
-            
             # evaulate compliance and eventually change path
             if(self.ows_evaluation(detour, edge)):
                 self.metric_path = alt_path
                 self.num_detours += 1
+
+        # if an agent randomly decides to change its path.
+        elif(self.random_rerouting_evaluation()):
+            alt_path, detour = self.get_alternative_path(self.metric_path, self.metric_path_length)
+            self.metric_path = alt_path
+            self.location['random_rerouting'] = True
+
+    def random_rerouting_evaluation(self):
+        """Evaluates at every node whether an agent would stay on his current path or take an alternative path.
+        The alternative path will be the second-shortest-path. The corresponding probability threshold can be modified
+        in the model parameters.
+
+        Returns
+            Boolean: True if the agent would take an alternative path, False if not.
+        """
+        # generate a random number between 0.0 and 1.0. This marks the probability, whether an agent takes an alternative path or not.
+        node_rerouting_probability = self.rng.random()
+        probability_threshold = self.model.p.random_rerouting_probability
+
+        if(node_rerouting_probability < probability_threshold):
+            return True
 
 
     def ows_evaluation(self, detour, edge):
@@ -421,7 +441,6 @@ class MyModel(ap.Model):
         final_edge_gdf.to_file('./output/edges.gpkg', driver='GPKG', layer='Edges_temporal')
         # print compliance statistics         
         print("Compliances: " + str(self.compliances) + "; Non-Compliances: " + str(self.non_compliances))
-
     def visualize_model(self):
         """Visualizes the model as animation.
             TODO: Update visualization part.
@@ -468,6 +487,7 @@ parameters = {
     'steps': 100,
     'viz': False,
     'duration': 5,
+    'random_rerouting_probability': 0.2,
     'density': False,
     'impatience': False,
     'seed': 40,
