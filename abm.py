@@ -198,7 +198,7 @@ class Pedestrian(ap.Agent):
             self.leftover_distance = self.leftover_distance - self.walking_distance
             
             # if on last edge use walk_to_distance instead of edge length for next location calculation
-            if len(self.metric_path) == 3:
+            if len(self.metric_path) == 2:
                 self.location['geometry'] = current_directed_edge['geometry'].interpolate(self.walk_to_dest - self.leftover_distance)
             else:
                 self.location['geometry'] = current_directed_edge['geometry'].interpolate(current_directed_edge['mm_len'] - self.leftover_distance)
