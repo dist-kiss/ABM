@@ -44,42 +44,75 @@ class Pedestrian(ap.Agent):
         self.metric_path = []
         self.leftover_distance = 0
         self.len_traversed = 0
-        # Choose random origin and destination within boundaries of graph area
-        # TODO: calculate point snap to line 
-        self.orig, self.dest = movement.generate_random_orig_dest(self.model.area_polygon, 250, self.rng)
-                
-        # Find the closest nodes in the network for origin and destination
-        self.orig_node_id = movement.get_nearest_node(self.model.nodes, self.orig)
-        self.dest_node_id = movement.get_nearest_node(self.model.nodes, self.dest)
+
+        # Choose random origin and destination within street network
+        self.orig, self.dest = movement.get_random_org_dest(self.model.edges, seed, 250)
+
+        # Get the closest nodes in the network for origin and destination
+        self.orig_node_id = self.orig['nearer_node']
+        self.dest_node_id = self.dest['nearer_node']
         #TODO: Place agents in the model at different times
         
-        
-        # Set current location to the origin node and add attributes
-        self.location = self.model.nodes.loc[[self.orig_node_id]].to_dict(orient='records')[0]
-        self.location['agentID'] = self.id
-        self.location['finished'] = False
-        self.location['density_threshold'] = self.density_threshold
-        
         # Compute shortest path to destination
-        self.agent_compute_path()
-        # TODO: evalute whether computing all possible path has computational advantage 
-        # self.agent_compute_all_paths()
-        
+        self.agent_compute_path(self.orig_node_id, self.dest_node_id)
 
+        # if origin not on first edge of metric path
+        if len(self.metric_path) < 2 or self.metric_path[1] != self.orig['remote_node']:
+            # add remote node of origin to path as first node (now origin will be on first edge of path)
+            self.metric_path.insert(0, self.orig['remote_node'])
+            # set distance between first node of path and origin
+            self.start_at_dist = self.orig['dist_from_remote']
+        else:
+            # set distance between first node of path and origin
+            self.start_at_dist = self.orig['dist_from_nearer']
+
+        # if destination not on last edge of metric path
+        if len(self.metric_path) < 2 or self.metric_path[-2] != self.dest['remote_node']:
+            # add remote node of destination to path as last node (now destination will be on last edge of path)
+            self.metric_path.append(self.dest['remote_node'])
+            # set distance between penultimate node of path and destination
+            self.walk_to_dest = self.dest['dist_from_nearer']
+        else:
+            # set distance between penultimate node of path and destination
+            self.walk_to_dest = self.dest['dist_from_remote']
+            
+        # set the location of the agent to its origin
+        self.first_position()        
 
         
-    def agent_compute_path(self):
+    def agent_compute_path(self, start_node, dest_node):
         """Calculate the shortest path from the agents current location to its destination.
             Stores result as list of nodes in a shortest path.
         """
-        self.metric_path = nx.dijkstra_path(self.model.G, source=self.location['nodeID'], target=self.dest_node_id, weight='mm_len')
+        self.metric_path = nx.dijkstra_path(self.model.G, source=start_node, target=dest_node, weight='mm_len')
         self.metric_path_length = nx.path_weight(self.model.G, self.metric_path, weight='mm_len')
 
-    def agent_compute_all_paths(self):
-        """Generate all simple paths in the model graph from origin off the agent to its destiantion,
-            starting from shortest ones
-        """
-        self.all_simple_paths = nx.shortest_simple_paths(self.model.G, source=self.location['nodeID'], target=self.dest_node_id, weight='mm_len')
+    def first_position(self):
+        """Calculates the first position of an agent and creates a location dict to store location information of the agent. 
+            Also sets further attributes, such as edge counter attributes and the leftover distance to the next node. 
+        """        
+        # Update people counter of current edge
+        current_undirected_edge = self.model.G[self.metric_path[0]][self.metric_path[1]]
+        current_undirected_edge['temp_ppl_increase']+=1
+        current_undirected_edge['ppl_total']+=1
+        
+        # Get the edge the agent starts on (corrected direction)
+        current_directed_edge = movement.get_directed_edge(self.model.G, self.model.nodes, self.metric_path[0], self.metric_path[1])
+        
+        # Set distance to next node
+        self.leftover_distance = current_directed_edge['mm_len'] - self.start_at_dist
+        
+        # Create dict for agent location and related attributes
+        self.location = {
+            'geometry': current_directed_edge['geometry'].interpolate(self.start_at_dist),
+            'agentID': self.id,
+            'finished': False,
+            'density_threshold': self.density_threshold,
+            'latest_node': self.metric_path[0],
+            'non-compliance': False,
+            'compliance': False
+        }
+
                     
     def reset_location_compliance(self):
         """Resets location compliance values.
@@ -113,7 +146,15 @@ class Pedestrian(ap.Agent):
             
             # get next edge and set agent leftover distance and edge attributes
             current_undirected_edge = self.model.G[self.metric_path[0]][self.metric_path[1]]
-            self.leftover_distance = current_undirected_edge['mm_len']
+            
+            # If on penultimate node, then use walk_to_dest distance to only walk until destination point on edge is reached
+            if len(self.metric_path) == 2:
+                self.leftover_distance = self.walk_to_dest
+            # else use length of next edge for leftover_distance to continue walking along the path
+            else:
+                self.leftover_distance = current_undirected_edge['mm_len']
+            
+            # Update people counter of next edge
             current_undirected_edge['temp_ppl_increase']+=1
             current_undirected_edge['ppl_total']+=1
             # TODO: Implement waiting at node if there is no alternative option and pedestrian is unsatisfied
@@ -138,18 +179,31 @@ class Pedestrian(ap.Agent):
             self.metric_path.pop(0)
             # update remaining path length
             self.metric_path_length = nx.path_weight(self.model.G, self.metric_path, weight='mm_len')
-            # update location of agent
+            # get current node as dict
             new_location_node = self.model.nodes.loc[[self.metric_path[0]]].to_dict(orient='records')[0]
-            self.location.update( [('nodeID', new_location_node['nodeID']),('geometry', new_location_node['geometry'])] )
+            
+            
+            # if agent has reached final destination, update location of agent accordingly
+            if len(self.metric_path) == 1:
+                final_location = current_directed_edge['geometry'].interpolate(self.walk_to_dest)
+                self.location.update( [('latest_node', self.metric_path[0]),('geometry', final_location)] )
+            # else use next node location to update agent location
+            else:
+                self.location.update( [('latest_node', self.metric_path[0]),('geometry', new_location_node['geometry'])] )
         # if next node is not reached go on with calculation of next position
         else:
             # increase length traversed by walking_distance
             self.len_traversed += self.walking_distance
             # update location of agent using walking distance within current timestep
             self.leftover_distance = self.leftover_distance - self.walking_distance
-            self.location['geometry'] = current_directed_edge['geometry'].interpolate(current_directed_edge['mm_len'] - self.leftover_distance)
             
-    
+            # if on last edge use walk_to_distance instead of edge length for next location calculation
+            if len(self.metric_path) == 2:
+                self.location['geometry'] = current_directed_edge['geometry'].interpolate(self.walk_to_dest - self.leftover_distance)
+            else:
+                self.location['geometry'] = current_directed_edge['geometry'].interpolate(current_directed_edge['mm_len'] - self.leftover_distance)
+            
+
     def check_next_street_segment(self):
         """Checks whether the next street segement has an intervention 
             that stops the agent from accessing it. If there is an obstacle, 
@@ -312,7 +366,6 @@ class Pedestrian(ap.Agent):
 class MyModel(ap.Model):
 
     def setup(self):
-        self.create_area(area_shp=self.p.area_path, crs='EPSG:3857')
         self.create_graph(streets_gpkg=self.p.streets_path)
         
         # opt. visualize network nodes, edges and degree values
@@ -397,18 +450,7 @@ class MyModel(ap.Model):
         self.edges.plot(ax=ax, color='lightgrey', zorder=1)
         ax.set_axis_off()
         plt.show()
-    
-    def create_area(self, area_shp, crs):
-        """Reads in a polygon shapefile and transforms it to given crs. Sets the shapefile as model area attribute.
-
-        Args:
-            area_shp (str): Path to area shapefile 
-            crs (str): Coordinate reference system to transform shapefile to
-        """
-        # Read boundary polygon and make sure it uses CRS EPSG:3857
-        self.area_polygon = geopandas.read_file(area_shp)
-        self.area_polygon = self.area_polygon.to_crs(crs)
-        
+            
     def create_graph(self, streets_gpkg):
         """Creates the network graph for the model based on an given gpkg linestring file. 
 
@@ -453,7 +495,6 @@ parameters = {
     'remaining_length_weight': 50,
     'density_weight': 1,
     'impatience_weight': -0.5,
-    'area_path': "./boundaries/crop_area.shp",
     'streets_path': "./network-data/quakenbrueck_clean_alternate_ows.gpkg"
 }
 

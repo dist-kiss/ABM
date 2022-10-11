@@ -1,60 +1,80 @@
 from shapely.geometry import Point, LineString
 from shapely.ops import split, nearest_points, snap
+import numpy as np
 
 
-def generate_random_orig_dest(polygon, min_dist, rng):
-    """Create random origin and destination coordinates inside model polygon boundaries
-    with a minimum distance of min_dist (meter) apart.
-
+def generate_random_point_on_line(edges, rng):
+    """Create random origin, destination pair with minimum distance of min_dist between both points.
+    
     Parameters
     ----------
-    allowed_polygon : shapely.geometry.polygon.Polygon
-        Polygon - sets spatial boundaries to the origin and destination points 
-    min_dist : float
+    edges : geopandas.geodataframe.GeoDataFrame
+        Edges from networkx graph containing start and end node information
+    rng : numpy.random._generator.Generator
+       random generator with fixed seed
+
+    Returns
+    -------
+    random_point_with_information : Dict
+        Dict of random point on an edge from input parameter edges, 
+        nearest node on edge, other node on edge, distance to nearest node and 
+        distance to other, far node.
+    """
+    # Create weight list by edge length
+    weights = edges['mm_len'] / edges['mm_len'].sum()
+    # Get random edge index using weight list as probability function
+    index = rng.choice(edges.index, size=1, p=weights)
+    # Get random edge as dict
+    rn_edge = edges.loc[index].to_dict('records')[0]
+    # Get random distance along edge 
+    distance = rn_edge['mm_len'] * rng.random()
+    # Create point using rn_edge and distance 
+    point = rn_edge['geometry'].interpolate(distance)
+
+    # Get nearer and more remote node, and distances to both
+    if distance <= rn_edge['mm_len']/2:
+        nearer_node = rn_edge['node_start']
+        remote_node = rn_edge['node_end']
+        dist_from_nearest = distance
+        dist_from_remote = rn_edge['mm_len'] - distance
+    else:
+        nearer_node = rn_edge['node_end']
+        remote_node = rn_edge['node_start']
+        dist_from_nearest = rn_edge['mm_len'] - distance
+        dist_from_remote = distance
+
+    # Create dict with random point on edge and node information
+    return {
+            'point': point,
+            'nearer_node': nearer_node,
+            'remote_node': remote_node,
+            'dist_from_nearer': dist_from_nearest,
+            'dist_from_remote': dist_from_remote
+            }
+
+def get_random_org_dest(edges, seed, min_dist):
+    """Create random origin, destination pair with minimum distance of min_dist between both points.
+    
+    Parameters
+    ----------
+    edges : geopandas.geodataframe.GeoDataFrame
+        Edges from networkx graph containing start and end node information
+    min_dist : number
         minimum distance between origin and destination
 
     Returns
     -------
-    Point, Point
-        Origin and destination as shapely.geometry.point.Point
+    Origin, Destination: Dict, Dict
+        Dicts for origin and destination and including nearest node id and id of wider away other node on edge, and distances to both. 
+
     """
-    # Init random number generator
-    points = []
-    minx, miny, maxx, maxy = polygon.bounds.values[0]
-    while len(points) < 2:
-        pnt = Point(rng.uniform(minx, maxx), rng.uniform(miny, maxy))
-        # check if point in allowed area
-        if polygon.contains(pnt).values[0]:
-            # check if there is a origin already
-            if len(points) == 1:
-                # make sure next point is at least min_dist apart
-                distance = points[0].distance(pnt)
-                if distance > min_dist:
-                    points.append(pnt)
-            else:
-                # set origin
-                points.append(pnt)
-    return points[0], points[1]        
+    rng = np.random.default_rng(seed)
+    orig = generate_random_point_on_line(edges, rng)
+    dest = generate_random_point_on_line(edges, rng)
+    while orig['point'].distance(dest['point']) < min_dist:
+        dest = generate_random_point_on_line(edges, rng)
+    return orig, dest
 
-def get_nearest_node(nodes, point):
-    """Return the nearest node to a given point from of a set of nodes.
-
-        Parameters
-        ----------
-        nodes : geopandas.GeoDataFrame
-            GeoDataFrame with multiple point geometries 
-        point : shapely.geometry.point.Point
-            Point  
-
-        Returns
-        -------
-        Index
-            The GeoDataFrame index of the nearest node 
-    """
-    multipoint = nodes.geometry.unary_union
-    queried_geom, nearest_geom = nearest_points(point, multipoint)
-    res = nodes.index[nodes['geometry'] == nearest_geom].tolist()[0]
-    return res
 
 
 def get_directed_edge(graph, nodes, start, end):
