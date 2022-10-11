@@ -86,6 +86,7 @@ class Pedestrian(ap.Agent):
         """
         self.location['non-compliance'] = False
         self.location['compliance'] = False 
+        self.location['random_rerouting'] = False
     
     def not_reached_destination(self):
         """Checks whether agent has not reached its destination yet and returns boolean.
@@ -170,6 +171,8 @@ class Pedestrian(ap.Agent):
         elif(self.random_rerouting_evaluation()):
             alt_path, detour = self.get_alternative_path(self.metric_path, self.metric_path_length)
             self.metric_path = alt_path
+            self.location['random_rerouting'] = True
+
     def random_rerouting_evaluation(self):
         """Evaluates at every node whether an agent would stay on his current path or take an alternative path.
         The alternative path will be the second-shortest-path. The corresponding probability threshold can be modified
