@@ -42,7 +42,7 @@ class Pedestrian(ap.Agent):
         # Initialize variables 
         self.num_detours = 0
         self.metric_path = []
-        self.leftover_distance = 0
+        self.remaining_dist_on_edge = 0
         self.len_traversed = 0
 
         # Choose random origin and destination within street network
@@ -81,15 +81,15 @@ class Pedestrian(ap.Agent):
 
         
     def agent_compute_path(self, start_node, dest_node):
-        """Calculate the shortest path from the agents current location to its destination.
-            Stores result as list of nodes in a shortest path.
+        """Calculate the shortest path from the agents current location to its destination and the length of the path.
+            Stores result as agent variables (list of nodes in a shortest path, float).
         """
         self.metric_path = nx.dijkstra_path(self.model.G, source=start_node, target=dest_node, weight='mm_len')
         self.metric_path_length = nx.path_weight(self.model.G, self.metric_path, weight='mm_len')
 
     def first_position(self):
         """Calculates the first position of an agent and creates a location dict to store location information of the agent. 
-            Also sets further attributes, such as edge counter attributes and the leftover distance to the next node. 
+            Also sets further attributes, such as edge counter attributes and the remaining distance to the next node. 
         """        
         # Update people counter of current edge
         current_undirected_edge = self.model.G[self.metric_path[0]][self.metric_path[1]]
@@ -100,7 +100,7 @@ class Pedestrian(ap.Agent):
         current_directed_edge = movement.get_directed_edge(self.model.G, self.model.nodes, self.metric_path[0], self.metric_path[1])
         
         # Set distance to next node
-        self.leftover_distance = current_directed_edge['mm_len'] - self.start_at_dist
+        self.remaining_dist_on_edge = current_directed_edge['mm_len'] - self.start_at_dist
         
         # Create dict for agent location and related attributes
         self.location = {
@@ -137,22 +137,22 @@ class Pedestrian(ap.Agent):
     
     def check_next_node(self):
             # check if agent is on node 
-        if(self.leftover_distance == 0):
+        if(self.remaining_dist_on_edge == 0):
             # agent left last edges, so reset compliance attributes
             self.reset_location_compliance()
 
             # evaluate next street segment regarding interventions. If there is no intervention, evaluate to randomly reroute.
             self.check_next_street_segment()
             
-            # get next edge and set agent leftover distance and edge attributes
+            # get next edge
             current_undirected_edge = self.model.G[self.metric_path[0]][self.metric_path[1]]
             
-            # If on penultimate node, then use walk_to_dest distance to only walk until destination point on edge is reached
+            # If on penultimate node, then use walk_to_dest distance as remaining distance to only walk until destination point is reached
             if len(self.metric_path) == 2:
-                self.leftover_distance = self.walk_to_dest
-            # else use length of next edge for leftover_distance to continue walking along the path
+                self.remaining_dist_on_edge = self.walk_to_dest
+            # else set remaining distance to next node to length of next edge to continue walking along the path
             else:
-                self.leftover_distance = current_undirected_edge['mm_len']
+                self.remaining_dist_on_edge = current_undirected_edge['mm_len']
             
             # Update people counter of next edge
             current_undirected_edge['temp_ppl_increase']+=1
@@ -168,11 +168,11 @@ class Pedestrian(ap.Agent):
         current_directed_edge = movement.get_directed_edge(self.model.G, self.model.nodes, self.metric_path[0], self.metric_path[1])
 
         # if pedestrian would walk past next node stop at next node instead 
-        if  self.walking_distance > self.leftover_distance:
-            # increase length traversed by leftover distance
-            self.len_traversed += self.leftover_distance
-            # reset leftover distance
-            self.leftover_distance = 0
+        if  self.walking_distance > self.remaining_dist_on_edge:
+            # increase length traversed by the remaining distance to next node
+            self.len_traversed += self.remaining_dist_on_edge
+            # reset remaining distance
+            self.remaining_dist_on_edge = 0
             # reduce people counter of current edge
             self.model.G[self.metric_path[0]][self.metric_path[1]]['temp_ppl_increase']-=1
             # erase first node from current path list 
@@ -195,13 +195,13 @@ class Pedestrian(ap.Agent):
             # increase length traversed by walking_distance
             self.len_traversed += self.walking_distance
             # update location of agent using walking distance within current timestep
-            self.leftover_distance = self.leftover_distance - self.walking_distance
+            self.remaining_dist_on_edge = self.remaining_dist_on_edge - self.walking_distance
             
             # if on last edge use walk_to_distance instead of edge length for next location calculation
             if len(self.metric_path) == 2:
-                self.location['geometry'] = current_directed_edge['geometry'].interpolate(self.walk_to_dest - self.leftover_distance)
+                self.location['geometry'] = current_directed_edge['geometry'].interpolate(self.walk_to_dest - self.remaining_dist_on_edge)
             else:
-                self.location['geometry'] = current_directed_edge['geometry'].interpolate(current_directed_edge['mm_len'] - self.leftover_distance)
+                self.location['geometry'] = current_directed_edge['geometry'].interpolate(current_directed_edge['mm_len'] - self.remaining_dist_on_edge)
             
 
     def check_next_street_segment(self):
@@ -273,49 +273,17 @@ class Pedestrian(ap.Agent):
             prop_noncompliance += self.num_detours * self.model.p.impatience_weight
         prop_noncompliance = prop_noncompliance * self.ovr_risk_tolerance
         if(x > prop_noncompliance):
-            # print("Compliance, " + str(self.id))
             self.location['compliance'] = True
             self.model.compliances += 1
             return True
         else:
-            print("P: " + str(prop_noncompliance) + "; X: " + str(x))
+            # if logging: print probability and x, as well as, id of agent not complying
+            if(self.model.p.logging):
+                print("P: " + str(prop_noncompliance) + "; X: " + str(x))
+                print("Non-Compliance, " + str(self.id))
             self.location['non-compliance'] = True
             self.model.non_compliances += 1
-            print("Non-Compliance, " + str(self.id))
-            return False   
-
-    # def deprecated_ows_evaluation(self, detour, edge):
-    #     """Evalutes whether agent complies with one way street intervention and returns decision as boolean.
-    #         Formula F(x1,...,xn) for the chance to comply is:
-    #         F(detour, remaining_shortest_path_length = rspl, edge_density, impatience) 
-    #         = detour/rspl * detour_weight + edge_density * density_weight + impatience * impatience_weight
-
-    #     Args:
-    #         detour (float): The detour length the alternative option would result in 
-    #         edge (_type_): The one way street edge
-
-    #     Returns:
-    #         Boolean: True if the agent complies with the intervention, False if it does not comply
-    #     """
-    #     x = self.rng.random() * 100
-    #     compliance = 0
-    #     norm_detour = detour/self.metric_path_length
-    #     compliance += max(1 - 0.5 * norm_detour, 0) * 100
-    #     if(self.model.p.density):
-    #         compliance += edge['density'] / self.density_threshold * 50
-    #     if(self.model.p.impatience):
-    #         compliance -= self.num_detours * 10
-    #     compliance = compliance * self.ovr_risk_tolerance
-    #     if(x < compliance):
-    #         # print("Compliance, " + str(self.id))
-    #         self.location['compliance'] = True
-    #         self.model.compliances += 1
-    #         return True
-    #     else:
-    #         self.location['non-compliance'] = True
-    #         self.model.non_compliances += 1
-    #         print("Non-Compliance, " + str(self.id))
-    #         return False   
+            return False 
 
         
     def get_alternative_path(self, path, metric_path_length):
@@ -353,7 +321,9 @@ class Pedestrian(ap.Agent):
             else:
                 # reset walkability attribute of graph 
                 self.network[current_node][next_node]["walkable"] = True
-                # print('alt: '+ str(length) + 'orig: ' + str(metric_path_length))
+                if(self.model.p.logging):
+                    # if logging: print alternative and current path lengths 
+                    print('alt: '+ str(length) + 'orig: ' + str(metric_path_length))
                 return alternative_path, length - metric_path_length
         
         # if there is no alternative path return inital path
@@ -439,8 +409,9 @@ class MyModel(ap.Model):
         # output edge data as gpkg 
         final_edge_gdf = concat(self.edge_gdf, ignore_index=True)
         final_edge_gdf.to_file('./output/edges.gpkg', driver='GPKG', layer='Edges_temporal')
-        # print compliance statistics         
-        print("Compliances: " + str(self.compliances) + "; Non-Compliances: " + str(self.non_compliances))
+        # if logging: print compliance statistics         
+        if(self.p.logging):
+            print("Compliances: " + str(self.compliances) + "; Non-Compliances: " + str(self.non_compliances))
     def visualize_model(self):
         """Visualizes the model as animation.
             TODO: Update visualization part.
@@ -469,8 +440,6 @@ class MyModel(ap.Model):
         self.nodes = self.nodes.set_index("nodeID", drop=False)
         self.nodes = self.nodes.rename_axis([None])
         self.G = nx.convert_node_labels_to_integers(self.G, first_label=0, ordering='default', label_attribute=None)
-        # mapping = dict(zip([(geom.x, geom.y) for geom in self.nodes['geometry'].tolist()], self.nodes.index[self.nodes['nodeID']-1].tolist()))
-        # self.G = nx.relabel_nodes(self.G, mapping)
         nx.set_edge_attributes(self.G, 0, "ppl_count")
         nx.set_edge_attributes(self.G, 0, "temp_ppl_increase")
         nx.set_edge_attributes(self.G, 0, "ppl_total")
@@ -478,7 +447,6 @@ class MyModel(ap.Model):
         density = nx.get_edge_attributes(self.G, "density")
         self.max_density = density
         nx.set_edge_attributes(self.G, 0, "max_density")
-        # nx.set_edge_attributes(self.G, False, "oneway_from")
 
 
 # specify model parameters
@@ -495,7 +463,8 @@ parameters = {
     'remaining_length_weight': 50,
     'density_weight': 1,
     'impatience_weight': -0.5,
-    'streets_path': "./network-data/quakenbrueck_clean_alternate_ows.gpkg"
+    'streets_path': "./network-data/quakenbrueck_clean_alternate_ows.gpkg",
+    'logging': False
 }
 
 # Run the model!
