@@ -463,7 +463,7 @@ parameters = {
     'remaining_length_weight': 50,
     'density_weight': 1,
     'impatience_weight': -0.5,
-    'streets_path': "./input-data/muenster2.gpkg",
+    'streets_path': "./input-data/quakenbrueck.gpkg",
     'logging': False
 }
 
