@@ -328,7 +328,7 @@ class Pedestrian(ap.Agent):
         
         # if there is no alternative path return inital path
         except (nx.NetworkXNoPath) as e:
-            print("No alternative for agent " + str(self.id) + ' at node ' + str(self.location['nodeID'])+ '.')
+            print("No alternative for agent " + str(self.id) + ' at node ' + str(self.location['latest_node'])+ '.')
             # reset walkability attribute of graph 
             self.network[current_node][next_node]["walkable"] = True
             return path, 0
@@ -463,7 +463,7 @@ parameters = {
     'remaining_length_weight': 50,
     'density_weight': 1,
     'impatience_weight': -0.5,
-    'streets_path': "./network-data/quakenbrueck_clean_alternate_ows.gpkg",
+    'streets_path': "./input-data/muenster2.gpkg",
     'logging': False
 }
 
