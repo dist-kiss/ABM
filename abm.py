@@ -37,7 +37,10 @@ class Pedestrian(ap.Agent):
         self.density_threshold = round( 0.03 + self.rng.random() * 0.07, 4)
         # self.ows_threshold = 0.75 + self.rng.random() * 0.25
         # self.detour_threshold = 0.75 + self.rng.random() * 0.25
-        self.ovr_risk_tolerance = 0.8 + self.rng.random() * 0.2
+
+        # TODO: Justify risk_appetite value. Is this concept valid 
+        # Higher values -> more willingness to not comply with measures
+        self.risk_appetite = self.rng.gauss(1, self.model.p.risk_appetite_std)
 
         # Initialize variables 
         self.num_detours = 0
@@ -223,6 +226,8 @@ class Pedestrian(ap.Agent):
 
         # if an agent randomly decides to change its path.
         elif(self.random_rerouting_evaluation()):
+            # TODO: Check if agents should be allowed to walk through forbidden paths as result of random rerouting, 
+            # currently restricted by get_alternative_path() function
             alt_path, detour = self.get_alternative_path(self.metric_path, self.metric_path_length)
             self.metric_path = alt_path
             self.location['random_rerouting'] = True
@@ -235,6 +240,7 @@ class Pedestrian(ap.Agent):
         Returns
             Boolean: True if the agent would take an alternative path, False if not.
         """
+        # TODO: Check if probabilty should be replaced by regression!
         # generate a random number between 0.0 and 1.0. This marks the probability, whether an agent takes an alternative path or not.
         node_rerouting_probability = self.rng.random()
         probability_threshold = self.model.p.random_rerouting_probability
@@ -256,30 +262,30 @@ class Pedestrian(ap.Agent):
         Returns:
             Boolean: True if the agent complies with the intervention, False if it does not comply
         """
-        # TODO: Look at regression and how to potentially use it for the evaluation part
         x = self.rng.random()
         forbidden = 1
         rel_tot_detour = detour/(self.len_traversed + self.metric_path_length)
         z = 0.1899 + rel_tot_detour * 3.8243 - forbidden * 1.2794 
-        prop_noncompliance = 1/(1+ math.exp(-z))
-        # norm_detour = detour/self.metric_path_length
-        # # detour
-        # prop_noncompliance += detour * self.model.p.detour_weight
-        # prop_noncompliance += norm_detour * self.model.p.remaining_length_weight
+        prop_non_compliance = 1/(1+ math.exp(-z))
+
         if(self.model.p.density):
-            prop_noncompliance += edge['density'] * self.model.p.density_weight 
+            prop_non_compliance += edge['density'] * self.model.p.density_weight 
             # self.density_threshold?
+        
+        # TODO: Check if impatience is still a thing! If not delete code snippet
         if(self.model.p.impatience):
-            prop_noncompliance += self.num_detours * self.model.p.impatience_weight
-        prop_noncompliance = prop_noncompliance * self.ovr_risk_tolerance
-        if(x > prop_noncompliance):
+            prop_non_compliance += self.num_detours * self.model.p.impatience_weight
+        
+        # TODO: See initialisation of risk_appetite: Justify concept!
+        prop_non_compliance = prop_non_compliance * self.risk_appetite
+        if(x > prop_non_compliance):
             self.location['compliance'] = True
             self.model.compliances += 1
             return True
         else:
             # if logging: print probability and x, as well as, id of agent not complying
             if(self.model.p.logging):
-                print("P: " + str(prop_noncompliance) + "; X: " + str(x))
+                print("P: " + str(prop_non_compliance) + "; X: " + str(x))
                 print("Non-Compliance, " + str(self.id))
             self.location['non-compliance'] = True
             self.model.non_compliances += 1
@@ -455,7 +461,12 @@ parameters = {
     'steps': 100,
     'viz': False,
     'duration': 5,
-    'random_rerouting_probability': 0.2,
+    # Including participants walking through forbidden streets as result of random rerouting:
+    # 'random_rerouting_probability': 0.28,
+    # Excluding participants walking through forbidden streets as result of random rerouting:
+    'random_rerouting_probability': 0.235,
+    # TODO: Calibrate risk appetite standard deviation
+    'risk_appetite_std': 0.1,
     'density': False,
     'impatience': False,
     'seed': 40,
