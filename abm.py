@@ -214,23 +214,32 @@ class Pedestrian(ap.Agent):
         """
         edge = movement.get_directed_edge(self.model.G, self.model.nodes, self.metric_path[0],self.metric_path[1])
         # if one way street forbidden to enter
-        if(edge['one_way_reversed']):
-            # calculate alternative patha and detour
-            alt_path, detour = self.get_alternative_path(self.metric_path, self.metric_path_length)
-            # if (alt_path ==  self.metric_path):
-            #     return True
-            # evaulate compliance and eventually change path
-            if(self.ows_evaluation(detour, edge)):
+        if self.model.p.scenario == 2 or self.model.p.scenario == 3:
+            if (edge['one_way_reversed']):
+                # calculate alternative patha and detour
+                alt_path, detour = self.get_alternative_path(self.metric_path, self.metric_path_length)
+                # if (alt_path ==  self.metric_path):
+                #     return True
+                # evaulate compliance and eventually change path
+                if (self.ows_evaluation(detour, edge)):
+                    self.metric_path = alt_path
+                    self.num_detours += 1
+            # if an agent randomly decides to change its path.
+            elif (self.random_rerouting_evaluation()):
+                # TODO: Check if agents should be allowed to walk through forbidden paths as result of random rerouting,
+                # currently restricted by get_alternative_path() function
+                alt_path, detour = self.get_alternative_path(self.metric_path, self.metric_path_length)
                 self.metric_path = alt_path
-                self.num_detours += 1
+                self.location['random_rerouting'] = True
+        else:
+            # if an agent randomly decides to change its path.
+            if (self.random_rerouting_evaluation()):
+                # TODO: Check if agents should be allowed to walk through forbidden paths as result of random rerouting,
+                # currently restricted by get_alternative_path() function
+                alt_path, detour = self.get_alternative_path(self.metric_path, self.metric_path_length)
+                self.metric_path = alt_path
+                self.location['random_rerouting'] = True
 
-        # if an agent randomly decides to change its path.
-        elif(self.random_rerouting_evaluation()):
-            # TODO: Check if agents should be allowed to walk through forbidden paths as result of random rerouting, 
-            # currently restricted by get_alternative_path() function
-            alt_path, detour = self.get_alternative_path(self.metric_path, self.metric_path_length)
-            self.metric_path = alt_path
-            self.location['random_rerouting'] = True
 
     def random_rerouting_evaluation(self):
         """Evaluates at every node whether an agent would stay on his current path or take an alternative path.
@@ -262,34 +271,47 @@ class Pedestrian(ap.Agent):
         Returns:
             Boolean: True if the agent complies with the intervention, False if it does not comply
         """
-        x = self.rng.random()
-        forbidden = 1
-        rel_tot_detour = detour/(self.len_traversed + self.metric_path_length)
-        z = 0.1899 + rel_tot_detour * 3.8243 - forbidden * 1.2794 
-        prop_non_compliance = 1/(1+ math.exp(-z))
-
-        if(self.model.p.density):
-            prop_non_compliance += edge['density'] * self.model.p.density_weight 
-            # self.density_threshold?
-        
-        # TODO: Check if impatience is still a thing! If not delete code snippet
-        if(self.model.p.impatience):
-            prop_non_compliance += self.num_detours * self.model.p.impatience_weight
-        
-        # TODO: See initialisation of risk_appetite: Justify concept!
-        prop_non_compliance = prop_non_compliance * self.risk_appetite
-        if(x > prop_non_compliance):
+        # In Scenario 2, the agent always complies if he's at a street with an intervention. Therefore the evaluation is skipped
+        # and the parameters of the agent are set to comply.
+        # In the other scenarios the ows_evaluation is executed normally.
+        if self.model.p.scenario == 2:
             self.location['compliance'] = True
             self.model.compliances += 1
             return True
         else:
-            # if logging: print probability and x, as well as, id of agent not complying
-            if(self.model.p.logging):
-                print("P: " + str(prop_non_compliance) + "; X: " + str(x))
-                print("Non-Compliance, " + str(self.id))
-            self.location['non-compliance'] = True
-            self.model.non_compliances += 1
-            return False 
+            x = self.rng.random()
+            forbidden = 1
+            rel_tot_detour = detour / (self.len_traversed + self.metric_path_length)
+            z = 0.1899 + rel_tot_detour * 3.8243 - forbidden * 1.2794
+            prop_non_compliance = 1 / (1 + math.exp(-z))
+
+            if (self.model.p.density):
+                prop_non_compliance += edge['density'] * self.model.p.density_weight
+                # self.density_threshold?
+
+            # TODO: Check if impatience is still a thing! If not delete code snippet
+            if (self.model.p.impatience):
+                prop_non_compliance += self.num_detours * self.model.p.impatience_weight
+
+            # TODO: See initialisation of risk_appetite: Justify concept!
+            prop_non_compliance = prop_non_compliance * self.risk_appetite
+            if (x > prop_non_compliance):
+                self.location['compliance'] = True
+                self.model.compliances += 1
+                return True
+            else:
+
+                # recording compliance is only needed in scenarios where compliance can take place.
+                if self.model.p.scenario == 2 or self.model.p.scenario == 3:
+                    # if logging: print probability and x, as well as, id of agent not complying
+                    if (self.model.p.logging):
+                        print("P: " + str(prop_non_compliance) + "; X: " + str(x))
+                        print("Non-Compliance, " + str(self.id))
+                    self.location['non-compliance'] = True
+                    self.model.non_compliances += 1
+                    return False
+
+
 
         
     def get_alternative_path(self, path, metric_path_length):
@@ -329,7 +351,7 @@ class Pedestrian(ap.Agent):
                 self.network[current_node][next_node]["walkable"] = True
                 if(self.model.p.logging):
                     # if logging: print alternative and current path lengths 
-                    print('alt: '+ str(length) + 'orig: ' + str(metric_path_length))
+                    print('alt: '+ str(length) + ' orig: ' + str(metric_path_length))
                 return alternative_path, length - metric_path_length
         
         # if there is no alternative path return inital path
@@ -354,8 +376,10 @@ class MyModel(ap.Model):
         # Create lists for position and edge data and compliance counter 
         self.position_list = []
         self.edge_gdf = []
-        self.compliances = 0
-        self.non_compliances = 0
+        # compliances counters are only needed in scenarios where compliance can take place.
+        if self.model.p.scenario == 2 or self.model.p.scenario == 3:
+            self.compliances = 0
+            self.non_compliances = 0
         self.step_counter = 0
 
                     
@@ -382,9 +406,11 @@ class MyModel(ap.Model):
         nx.set_edge_attributes(self.model.G, 0, "temp_ppl_increase")
 
         """ Record a dynamic variable. """
-        # self.agents.record('metric_path')
-        self.model.record('non_compliances')
-        self.model.record('compliances')
+        # recording compliance is only needed in scenarios where compliance can take place.
+        if self.model.p.scenario == 2 or self.model.p.scenario == 3:
+            # self.agents.record('metric_path')
+            self.model.record('non_compliances')
+            self.model.record('compliances')
         
         # update fake date for temporal viz in qgis
         time = datetime.datetime(2000, 1, 1, self.step_counter * self.model.p.duration // 3600, self.step_counter * self.model.p.duration // 60, self.step_counter * self.model.p.duration % 60)
@@ -415,9 +441,11 @@ class MyModel(ap.Model):
         # output edge data as gpkg 
         final_edge_gdf = concat(self.edge_gdf, ignore_index=True)
         final_edge_gdf.to_file('./output/edges.gpkg', driver='GPKG', layer='Edges_temporal')
-        # if logging: print compliance statistics         
-        if(self.p.logging):
-            print("Compliances: " + str(self.compliances) + "; Non-Compliances: " + str(self.non_compliances))
+        # if logging: print compliance statistics (only in scenarios 2 and 3)
+        if self.model.p.scenario == 2 or self.model.p.scenario == 3:
+            if (self.p.logging):
+                print("Compliances: " + str(self.compliances) + "; Non-Compliances: " + str(self.non_compliances))
+
     def visualize_model(self):
         """Visualizes the model as animation.
             TODO: Update visualization part.
@@ -475,7 +503,10 @@ parameters = {
     'density_weight': 1,
     'impatience_weight': -0.5,
     'streets_path': "./input-data/quakenbrueck.gpkg",
-    'logging': False
+    'logging': False,
+    # Input a number from 1 to 3 to choose which scenario you want to run.
+    # Scenario 1 = no measures, Scenario 2 = measures with full compliance, Scenario 3 = measures with calibrated compliance
+    'scenario': 1,
 }
 
 # Run the model!
