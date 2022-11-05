@@ -133,7 +133,10 @@ class Pedestrian(ap.Agent):
         # if agent reached its destination, return
         if len(self.metric_path) < 2:
             self.location['finished'] = True
-            self.reset_location_compliance()
+            # resetting compliance is only necessary in scenarios where compliance can take place.
+            if self.model.p.scenario == 2 or self.model.p.scenario == 3:
+                self.reset_location_compliance()
+
             return False
         else: 
             return True
@@ -141,8 +144,11 @@ class Pedestrian(ap.Agent):
     def check_next_node(self):
             # check if agent is on node 
         if(self.remaining_dist_on_edge == 0):
-            # agent left last edges, so reset compliance attributes
-            self.reset_location_compliance()
+            # resetting compliance is only necessary in scenarios where compliance can take place.
+            if self.model.p.scenario == 2 or self.model.p.scenario == 3:
+                # agent left last edges, so reset compliance attributes
+                self.reset_location_compliance()
+
 
             # evaluate next street segment regarding interventions. If there is no intervention, evaluate to randomly reroute.
             self.check_next_street_segment()
@@ -158,8 +164,8 @@ class Pedestrian(ap.Agent):
                 self.remaining_dist_on_edge = current_undirected_edge['mm_len']
             
             # Update people counter of next edge
-            current_undirected_edge['temp_ppl_increase']+=1
-            current_undirected_edge['ppl_total']+=1
+            current_undirected_edge['temp_ppl_increase'] += 1
+            current_undirected_edge['ppl_total'] += 1
             # TODO: Implement waiting at node if there is no alternative option and pedestrian is unsatisfied
 
                            
@@ -171,7 +177,7 @@ class Pedestrian(ap.Agent):
         current_directed_edge = movement.get_directed_edge(self.model.G, self.model.nodes, self.metric_path[0], self.metric_path[1])
 
         # if pedestrian would walk past next node stop at next node instead 
-        if  self.walking_distance > self.remaining_dist_on_edge:
+        if self.walking_distance > self.remaining_dist_on_edge:
             # increase length traversed by the remaining distance to next node
             self.len_traversed += self.remaining_dist_on_edge
             # reset remaining distance
@@ -445,7 +451,7 @@ class MyModel(ap.Model):
         if self.model.p.scenario == 2 or self.model.p.scenario == 3:
             if (self.p.logging):
                 print("Compliances: " + str(self.compliances) + "; Non-Compliances: " + str(self.non_compliances))
-
+        
     def visualize_model(self):
         """Visualizes the model as animation.
             TODO: Update visualization part.
