@@ -75,6 +75,28 @@ def get_random_org_dest(edges, seed, min_dist):
         dest = generate_random_point_on_line(edges, rng)
     return orig, dest
 
+def get_random_dest(orig, edges, seed, min_dist):
+    """Create random origin, destination pair with minimum distance of min_dist between both points.
+    
+    Parameters
+    ----------
+    edges : geopandas.geodataframe.GeoDataFrame
+        Edges from networkx graph containing start and end node information
+    min_dist : number
+        minimum distance between origin and destination
+
+    Returns
+    -------
+    Origin, Destination: Dict, Dict
+        Dicts for origin and destination and including nearest node id and id of wider away other node on edge, and distances to both. 
+
+    """
+    rng = np.random.default_rng(seed)
+    dest = generate_random_point_on_line(edges, rng)
+    while orig['point'].distance(dest['point']) < min_dist:
+        dest = generate_random_point_on_line(edges, rng)
+    return dest
+
 
 
 def get_directed_edge(graph, nodes, start, end):
