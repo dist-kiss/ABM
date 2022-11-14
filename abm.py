@@ -309,7 +309,7 @@ class Pedestrian(ap.Agent):
 
         # TODO: Check if agents should be allowed to walk through forbidden paths as result of random rerouting, 
         # currently restricted by get_alternative_path() function
-        if(self.model.p.rand_reouting == 'regression' and self.generic_rerouting_regression(detour)): 
+        if(self.model.p.generic_reouting_method == 'regression' and self.generic_rerouting_regression(detour)): 
             self.metric_path = alt_path
             self.metric_path_length += detour
             self.location['random_rerouting'] = True
@@ -374,8 +374,6 @@ class Pedestrian(ap.Agent):
             Boolean: True if the agent complies with the intervention, False if it does not comply
         """
         if self.model.p.scenario == 'simple_compliance': # always comply
-            self.location['compliance'] = True
-            self.model.compliances += 1
             return True
         else: # complex compliance scenario
             x = self.rng.random()
@@ -592,8 +590,9 @@ parameters = {
     # Scenario 1: 'no_compliance' = Agents behave like there are no measures 
     # Scenario 2: 'simple_complicance' = Agents comply with every measure
     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
-    'scenario': 'complex_compliance',
-    'rand_reouting': 'regression'
+    'scenario': 'no_compliance',
+    # Choose value from ['regression', 'simple'] for parameter to decide which method to use for generic rerouting
+    'generic_reouting_method': 'simple'
 }
 
 # Run the model!
