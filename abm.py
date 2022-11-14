@@ -146,7 +146,7 @@ class Pedestrian(ap.Agent):
             'route_counter': self.route_counter,
             'density_threshold': self.density_threshold,
             'latest_node': self.metric_path[0],
-            'non-compliance': False,
+            'non_compliance': False,
             'compliance': False
         }
 
@@ -187,7 +187,7 @@ class Pedestrian(ap.Agent):
     def reset_location_compliance(self):
         """Resets location compliance values.
         """
-        self.location['non-compliance'] = False
+        self.location['non_compliance'] = False
         self.location['compliance'] = False 
         self.location['random_rerouting'] = False
     
@@ -303,7 +303,7 @@ class Pedestrian(ap.Agent):
                     self.metric_path_length += detour 
                     self.num_detours += 1
                 else: 
-                    self.location['non-compliance'] = True
+                    self.location['non_compliance'] = True
                     self.model.non_compliances += 1
                 return
 
