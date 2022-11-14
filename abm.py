@@ -288,9 +288,10 @@ class Pedestrian(ap.Agent):
         """
         next_edge = movement.get_directed_edge(self.model.G, self.model.nodes, self.metric_path[0],self.metric_path[1])
 
-        if(next_edge['one_way_reversed']):
-            # calculate alternative path and detour
-            alt_path, detour = self.get_alternative_path(self.metric_path, self.metric_path_length)
+        # calculate alternative path and detour
+        alt_path, detour = self.get_alternative_path(self.metric_path, self.metric_path_length)
+
+        if(next_edge['one_way_reversed']): # next street entry forbidden
             decides_to_comply = self.ows_evaluation(detour, next_edge)
             if(decides_to_comply):
                 self.location['compliance'] = True
@@ -304,16 +305,19 @@ class Pedestrian(ap.Agent):
                 self.model.non_compliances += 1
 
 
-        # agent randomly decides to change its path
-        elif(self.random_rerouting_evaluation()):
-            # TODO: Check if agents should be allowed to walk through forbidden paths as result of random rerouting, 
-            # currently restricted by get_alternative_path() function
-            alt_path, detour = self.get_alternative_path(self.metric_path, self.metric_path_length)
+        elif(self.model.p.rand_reouting == 'regression' and self.generic_rerouting_regression(detour)): 
             self.metric_path = alt_path
             self.metric_path_length += detour
             self.location['random_rerouting'] = True
 
-    def random_rerouting_evaluation(self):
+        elif(self.generic_rerouting_probability()):
+            # TODO: Check if agents should be allowed to walk through forbidden paths as result of random rerouting, 
+            # currently restricted by get_alternative_path() function
+            self.metric_path = alt_path
+            self.metric_path_length += detour
+            self.location['random_rerouting'] = True
+
+    def generic_rerouting_probability(self):
         """Evaluates at every node whether an agent would stay on his current path or take an alternative path.
         The alternative path will be the second-shortest-path. The corresponding probability threshold can be modified
         in the model parameters.
@@ -325,9 +329,33 @@ class Pedestrian(ap.Agent):
         # generate a random number between 0.0 and 1.0. This marks the probability, whether an agent takes an alternative path or not.
         node_rerouting_probability = self.rng.random()
         probability_threshold = self.model.p.random_rerouting_probability
-
+        
         if(node_rerouting_probability < probability_threshold):
             return True
+
+    def generic_rerouting_regression(self, detour):
+        """Evaluates at every node whether an agent would stay on his current path or take an alternative path.
+        The alternative path will be the second-shortest-path. The corresponding probability threshold can be modified
+        in the model parameters.
+
+        Returns
+            Boolean: True if the agent would take an alternative path, False if not.
+        """
+        # generate a random number between 0.0 and 1.0. This marks the probability, whether an agent takes an alternative path or not.
+        # alt_path, detour = self.get_alternative_path(self.metric_path, self.metric_path_length)
+
+        x = self.rng.random()
+        rel_tot_detour = detour/(self.len_traversed + self.metric_path_length)
+        rel_curr_detour = detour/(self.metric_path_length)
+        z = -0.0957 + rel_tot_detour * 6.1942 - rel_curr_detour * 2.5212
+        prop_rerouting = 1 - 1/(1+ math.exp(-z))
+
+
+        if(x > prop_rerouting):
+            return False
+        else: 
+            return True
+
 
 
     def ows_evaluation(self, detour, edge):
@@ -552,7 +580,8 @@ parameters = {
     'density_weight': 1,
     'impatience_weight': -0.5,
     'streets_path': "./input-data/quakenbrueck.gpkg",
-    'logging': False
+    'logging': False,
+    'rand_reouting': 'regression'
 }
 
 # Run the model!
