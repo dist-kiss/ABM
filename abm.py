@@ -62,7 +62,7 @@ class Pedestrian(ap.Agent):
 
         # Add actual origin and destination to the node based path
         self.add_exact_orig_to_path()
-        self.metric_path, self.metric_path_length = self.add_exact_dest_to_path(self.metric_path, self.metric_path_length)
+        self.metric_path, self.metric_path_length, self.distance_penult_node_to_dest = self.add_exact_dest_to_path(self.metric_path, self.metric_path_length)
 
         # set the location of the agent to its origin
         self.first_position()
@@ -114,14 +114,14 @@ class Pedestrian(ap.Agent):
             # add remote node of destination to path as last node (now destination will be on last edge of path)
             path.append(self.dest['remote_node'])
             # set distance between penultimate node of path and destination
-            self.walk_to_dest = self.dest['dist_from_nearer']
-            path_length += self.walk_to_dest
+            distance_penultimate_to_dest = self.dest['dist_from_nearer']
+            path_length += distance_penultimate_to_dest
         else:
             # set distance between penultimate node of path and destination
-            self.walk_to_dest = self.dest['dist_from_remote']
+            distance_penultimate_to_dest = self.dest['dist_from_remote']
             path_length -= self.dest['dist_from_nearer']
 
-        return path, path_length
+        return path, path_length, distance_penultimate_to_dest
 
 
     def first_position(self):
@@ -178,7 +178,7 @@ class Pedestrian(ap.Agent):
 
         # Add actual origin and destination to the node based path
         self.add_exact_orig_to_path()
-        self.metric_path, self.metric_path_length = self.add_exact_dest_to_path(self.metric_path, self.metric_path_length)
+        self.metric_path, self.metric_path_length, self.distance_penult_node_to_dest = self.add_exact_dest_to_path(self.metric_path, self.metric_path_length)
 
         # Calculate first position and attributes
         self.first_position()   
@@ -204,13 +204,12 @@ class Pedestrian(ap.Agent):
             
             current_undirected_edge = None 
 
-            # use walk_to_dest distance as remaining distance to only walk until destination point is reached
             is_on_penultimate_node = (len(self.metric_path) == 2)
             if is_on_penultimate_node:
                 # get next edge
                 current_undirected_edge = self.model.G[self.metric_path[0]][self.metric_path[1]]
                 # Set remaining distance to distance between penultimate graph node and destination
-                self.remaining_dist_on_edge = self.walk_to_dest
+                self.remaining_dist_on_edge = self.distance_penult_node_to_dest
             else: # not on penultimate node
                 # evaluate next street segment regarding interventions or random rerouting
                 self.check_next_street_segment()
@@ -239,7 +238,7 @@ class Pedestrian(ap.Agent):
         # update location of agent accordingly
         self.location.update( [('latest_node', self.metric_path[0]),('geometry', next_location)] )
 
-    def walkAlongStreet(self, next_location):
+    def walkAlongStreet(self, current_directed_edge, edge_length):
         """Simulate agent walking along the street for duration of one time step. 
             Update path and agent attributes. 
         """
@@ -250,6 +249,7 @@ class Pedestrian(ap.Agent):
         # update location of agent using walking distance within current timestep
         self.remaining_dist_on_edge = self.remaining_dist_on_edge - self.walking_distance
         # update location of agent accordingly
+        next_location = current_directed_edge['geometry'].interpolate(edge_length - self.remaining_dist_on_edge)
         self.location.update([('geometry', next_location)])
 
     def get_next_position(self):
@@ -262,13 +262,12 @@ class Pedestrian(ap.Agent):
 
         if(is_on_last_edge):
             if would_walk_beyond_next_node:
-                final_location = current_directed_edge['geometry'].interpolate(self.walk_to_dest)
+                final_location = current_directed_edge['geometry'].interpolate(self.distance_penult_node_to_dest)
                 self.walkUntilNode(final_location)
                 # assign new destination to walk towards
                 self.assign_new_destination()
             else: # will not reach destination in this timestep
-                final_location = current_directed_edge['geometry'].interpolate(self.walk_to_dest - self.remaining_dist_on_edge)
-                self.walkAlongStreet(final_location)
+                self.walkAlongStreet(current_directed_edge, self.distance_penult_node_to_dest)
 
         else: # not on last edge
             if would_walk_beyond_next_node:
@@ -278,8 +277,7 @@ class Pedestrian(ap.Agent):
                 self.model.G[self.metric_path[0]][self.metric_path[1]]['temp_ppl_increase']-=1
                 self.walkUntilNode(next_node['geometry'])
             else: # will not reach next node in this timestep
-                next_location = current_directed_edge['geometry'].interpolate(current_directed_edge['mm_len'] - self.remaining_dist_on_edge)
-                self.walkAlongStreet(next_location)
+                self.walkAlongStreet(current_directed_edge, current_directed_edge['mm_len'])
 
 
     def check_next_street_segment(self):
@@ -290,7 +288,7 @@ class Pedestrian(ap.Agent):
         next_edge = movement.get_directed_edge(self.model.G, self.model.nodes, self.metric_path[0],self.metric_path[1])
 
         # calculate alternative path and detour
-        alt_path, detour = self.get_alternative_path(self.metric_path, self.metric_path_length)
+        alt_path, detour, distance_penult_node_to_dest = self.get_alternative_path(self.metric_path, self.metric_path_length)
         
         if self.model.p.scenario in ["simple_compliance", "complex_compliance"]:
             if(next_edge['one_way_reversed']): # next street entry forbidden
@@ -300,10 +298,11 @@ class Pedestrian(ap.Agent):
                     self.model.compliances += 1
                     # replace initial path by alternative one
                     self.metric_path = alt_path
-                    self.metric_path_length += detour 
+                    self.metric_path_length += detour
+                    self.distance_penult_node_to_dest = distance_penult_node_to_dest
                     self.num_detours += 1
                 else: 
-                    self.location['non_compliance'] = True
+                    self.location['non-compliance'] = True
                     self.model.non_compliances += 1
                 return
 
@@ -312,11 +311,13 @@ class Pedestrian(ap.Agent):
         if(self.model.p.generic_reouting_method == 'regression' and self.generic_rerouting_regression(detour)): 
             self.metric_path = alt_path
             self.metric_path_length += detour
+            self.distance_penult_node_to_dest = distance_penult_node_to_dest
             self.location['random_rerouting'] = True
 
         elif(self.generic_rerouting_probability()):
             self.metric_path = alt_path
             self.metric_path_length += detour
+            self.distance_penult_node_to_dest = distance_penult_node_to_dest
             self.location['random_rerouting'] = True
 
     def generic_rerouting_probability(self):
@@ -344,7 +345,6 @@ class Pedestrian(ap.Agent):
             Boolean: True if the agent would take an alternative path, False if not.
         """
         # generate a random number between 0.0 and 1.0. This marks the probability, whether an agent takes an alternative path or not.
-        # alt_path, detour = self.get_alternative_path(self.metric_path, self.metric_path_length)
 
         x = self.rng.random()
         rel_tot_detour = detour/(self.len_traversed + self.metric_path_length)
@@ -412,7 +412,7 @@ class Pedestrian(ap.Agent):
             metric_path_length (float): Length of the inital path 
 
         Returns:
-            list, float: The alternative path and its length         
+            list, float, float: The alternative path, its length and distance between penultimate node and exact destination
         """
         # create variables for current node, the next node and the last node (destination) on the current path
         current_node = path[0]
@@ -429,7 +429,7 @@ class Pedestrian(ap.Agent):
             # compute alternative path and its length on subview
             alternative_path = nx.dijkstra_path(view, source=current_node, target=destination, weight='mm_len')
             length = nx.path_weight(view, alternative_path, weight='mm_len')
-            alternative_path, length = self.add_exact_dest_to_path(alternative_path, length)
+            alternative_path, length, distance_penult_node_to_dest = self.add_exact_dest_to_path(alternative_path, length)
             # check whether next edge on alternative path is one way street (forbidden to enter)
             next_edge = movement.get_directed_edge(self.model.G, self.model.nodes, alternative_path[0],alternative_path[1])
             if(next_edge['one_way_reversed']):
@@ -441,14 +441,14 @@ class Pedestrian(ap.Agent):
                 if(self.model.p.logging):
                     # if logging: print alternative and current path lengths 
                     print('alt: '+ str(length) + ' orig: ' + str(metric_path_length))
-                return alternative_path, length - metric_path_length
+                return alternative_path, length - metric_path_length, distance_penult_node_to_dest
         
         # if there is no alternative path return inital path
         except (nx.NetworkXNoPath) as e:
             print("No alternative for agent " + str(self.id) + ' at node ' + str(self.location['latest_node'])+ '.')
             # reset walkability attribute of graph 
             self.network[current_node][next_node]["walkable"] = True
-            return path, 0
+            return path, 0, self.distance_penult_node_to_dest
 
 class MyModel(ap.Model):
 
@@ -492,9 +492,10 @@ class MyModel(ap.Model):
         nx.set_edge_attributes(self.model.G, 0, "temp_ppl_increase")
 
         """ Record a dynamic variable. """
-        # self.agents.record('metric_path')
-        self.model.record('non_compliances')
-        self.model.record('compliances')
+        if self.model.p.scenario in ["simple_compliance", "complex_compliance"]:
+            # self.agents.record('metric_path')
+            self.model.record('non_compliances')
+            self.model.record('compliances')
         
         # update fake date for temporal viz in qgis
         time = datetime.datetime(2000, 1, 1, self.step_counter * self.model.p.duration // 3600, self.step_counter * self.model.p.duration // 60, self.step_counter * self.model.p.duration % 60)
@@ -590,7 +591,7 @@ parameters = {
     # Scenario 1: 'no_compliance' = Agents behave like there are no measures 
     # Scenario 2: 'simple_complicance' = Agents comply with every measure
     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
-    'scenario': 'no_compliance',
+    'scenario': 'complex_compliance',
     # Choose value from ['regression', 'simple'] for parameter to decide which method to use for generic rerouting
     'generic_reouting_method': 'simple'
 }
