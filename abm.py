@@ -146,7 +146,7 @@ class Pedestrian(ap.Agent):
             'route_counter': self.route_counter,
             'density_threshold': self.density_threshold,
             'latest_node': self.metric_path[0],
-            'non-compliance': False,
+            'non_compliance': False,
             'compliance': False
         }
 
@@ -187,7 +187,7 @@ class Pedestrian(ap.Agent):
     def reset_location_compliance(self):
         """Resets location compliance values.
         """
-        self.location['non-compliance'] = False
+        self.location['non_compliance'] = False
         self.location['compliance'] = False 
         self.location['random_rerouting'] = False
     
@@ -196,16 +196,17 @@ class Pedestrian(ap.Agent):
         """For agents that are on street intersection, evaluates next street for possible interventions.
         """        
 
-        is_agent_on_node = self.remaining_dist_on_edge == 0
+        is_agent_on_node = (self.remaining_dist_on_edge == 0)
         if(is_agent_on_node):
-            # agent left last edges, so reset compliance attributes
-            self.reset_location_compliance()
+            if self.model.p.scenario in ["simple_compliance", "complex_compliance"]:
+                # agent left last edges, so reset compliance attributes
+                self.reset_location_compliance()
             
             current_undirected_edge = None 
 
             # use walk_to_dest distance as remaining distance to only walk until destination point is reached
-            is_on_penultimate_node = len(self.metric_path) == 2
-            if is_on_penultimate_node:                
+            is_on_penultimate_node = (len(self.metric_path) == 2)
+            if is_on_penultimate_node:
                 # get next edge
                 current_undirected_edge = self.model.G[self.metric_path[0]][self.metric_path[1]]
                 # Set remaining distance to distance between penultimate graph node and destination
@@ -219,8 +220,8 @@ class Pedestrian(ap.Agent):
                 self.remaining_dist_on_edge = current_undirected_edge['mm_len']
 
             # Update people counter of next edge
-            current_undirected_edge['temp_ppl_increase']+=1
-            current_undirected_edge['ppl_total']+=1
+            current_undirected_edge['temp_ppl_increase'] += 1
+            current_undirected_edge['ppl_total'] += 1
             # TODO: Implement waiting at node if there is no alternative option and pedestrian is unsatisfied
 
                            
@@ -256,8 +257,8 @@ class Pedestrian(ap.Agent):
             of a timestep and the walking speed of the agent.
         """
         current_directed_edge = movement.get_directed_edge(self.model.G, self.model.nodes, self.metric_path[0], self.metric_path[1])
-        would_walk_beyond_next_node = self.walking_distance > self.remaining_dist_on_edge
-        is_on_last_edge = len(self.metric_path) == 2
+        would_walk_beyond_next_node = (self.walking_distance > self.remaining_dist_on_edge)
+        is_on_last_edge = (len(self.metric_path) == 2)
 
         if(is_on_last_edge):
             if would_walk_beyond_next_node:
@@ -290,29 +291,30 @@ class Pedestrian(ap.Agent):
 
         # calculate alternative path and detour
         alt_path, detour = self.get_alternative_path(self.metric_path, self.metric_path_length)
+        
+        if self.model.p.scenario in ["simple_compliance", "complex_compliance"]:
+            if(next_edge['one_way_reversed']): # next street entry forbidden
+                decides_to_comply = self.ows_evaluation(detour, next_edge)
+                if(decides_to_comply):
+                    self.location['compliance'] = True
+                    self.model.compliances += 1
+                    # replace initial path by alternative one
+                    self.metric_path = alt_path
+                    self.metric_path_length += detour 
+                    self.num_detours += 1
+                else: 
+                    self.location['non_compliance'] = True
+                    self.model.non_compliances += 1
+                return
 
-        if(next_edge['one_way_reversed']): # next street entry forbidden
-            decides_to_comply = self.ows_evaluation(detour, next_edge)
-            if(decides_to_comply):
-                self.location['compliance'] = True
-                self.model.compliances += 1
-                # replace initial path by alternative one
-                self.metric_path = alt_path
-                self.metric_path_length += detour 
-                self.num_detours += 1
-            else: 
-                self.location['non-compliance'] = True
-                self.model.non_compliances += 1
-
-
-        elif(self.model.p.rand_reouting == 'regression' and self.generic_rerouting_regression(detour)): 
+        # TODO: Check if agents should be allowed to walk through forbidden paths as result of random rerouting, 
+        # currently restricted by get_alternative_path() function
+        if(self.model.p.generic_reouting_method == 'regression' and self.generic_rerouting_regression(detour)): 
             self.metric_path = alt_path
             self.metric_path_length += detour
             self.location['random_rerouting'] = True
 
         elif(self.generic_rerouting_probability()):
-            # TODO: Check if agents should be allowed to walk through forbidden paths as result of random rerouting, 
-            # currently restricted by get_alternative_path() function
             self.metric_path = alt_path
             self.metric_path_length += detour
             self.location['random_rerouting'] = True
@@ -371,30 +373,33 @@ class Pedestrian(ap.Agent):
         Returns:
             Boolean: True if the agent complies with the intervention, False if it does not comply
         """
-        x = self.rng.random()
-        forbidden = 1
-        rel_tot_detour = detour/(self.len_traversed + self.metric_path_length)
-        z = 0.1899 + rel_tot_detour * 3.8243 - forbidden * 1.2794 
-        prop_non_compliance = 1/(1+ math.exp(-z))
-
-        if(self.model.p.density):
-            prop_non_compliance += edge['density'] * self.model.p.density_weight 
-            # self.density_threshold?
-        
-        # TODO: Check if impatience is still a thing! If not delete code snippet
-        if(self.model.p.impatience):
-            prop_non_compliance += self.num_detours * self.model.p.impatience_weight
-        
-        # TODO: See initialisation of risk_appetite: Justify concept!
-        prop_non_compliance = prop_non_compliance * self.risk_appetite
-        if(x > prop_non_compliance):
+        if self.model.p.scenario == 'simple_compliance': # always comply
             return True
-        else:
-            # if logging: print probability and x, as well as, id of agent not complying
-            if(self.model.p.logging):
-                print("P: " + str(prop_non_compliance) + "; X: " + str(x))
-                print("Non-Compliance, " + str(self.id))
-            return False 
+        else: # complex compliance scenario
+            x = self.rng.random()
+            forbidden = 1
+            rel_tot_detour = detour / (self.len_traversed + self.metric_path_length)
+            z = 0.1899 + rel_tot_detour * 3.8243 - forbidden * 1.2794
+            prop_non_compliance = 1 / (1 + math.exp(-z))
+
+            if (self.model.p.density):
+                prop_non_compliance += edge['density'] * self.model.p.density_weight
+                # self.density_threshold?
+
+            # TODO: Check if impatience is still a thing! If not delete code snippet
+            if (self.model.p.impatience):
+                prop_non_compliance += self.num_detours * self.model.p.impatience_weight
+
+            # TODO: See initialisation of risk_appetite: Justify concept!
+            prop_non_compliance = prop_non_compliance * self.risk_appetite
+            if(x > prop_non_compliance):
+                return True
+            else:
+                # if logging: print probability, x and id of agent not complying
+                if(self.model.p.logging):
+                    print("P: " + str(prop_non_compliance) + "; X: " + str(x))
+                    print("Non-Compliance, " + str(self.id))
+                return False 
 
         
     def get_alternative_path(self, path, metric_path_length):
@@ -435,7 +440,7 @@ class Pedestrian(ap.Agent):
                 self.network[current_node][next_node]["walkable"] = True
                 if(self.model.p.logging):
                     # if logging: print alternative and current path lengths 
-                    print('alt: '+ str(length) + 'orig: ' + str(metric_path_length))
+                    print('alt: '+ str(length) + ' orig: ' + str(metric_path_length))
                 return alternative_path, length - metric_path_length
         
         # if there is no alternative path return inital path
@@ -520,9 +525,9 @@ class MyModel(ap.Model):
         # output edge data as gpkg 
         final_edge_gdf = concat(self.edge_gdf, ignore_index=True)
         final_edge_gdf.to_file('./output/edges.gpkg', driver='GPKG', layer='Edges_temporal')
-        # if logging: print compliance statistics         
-        if(self.p.logging):
+        if (self.p.logging):
             print("Compliances: " + str(self.compliances) + "; Non-Compliances: " + str(self.non_compliances))
+        
     def visualize_model(self):
         """Visualizes the model as animation.
             TODO: Update visualization part.
@@ -581,7 +586,13 @@ parameters = {
     'impatience_weight': -0.5,
     'streets_path': "./input-data/quakenbrueck.gpkg",
     'logging': False,
-    'rand_reouting': 'regression'
+    # Choose value from ['no_compliance', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
+    # Scenario 1: 'no_compliance' = Agents behave like there are no measures 
+    # Scenario 2: 'simple_complicance' = Agents comply with every measure
+    # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
+    'scenario': 'no_compliance',
+    # Choose value from ['regression', 'simple'] for parameter to decide which method to use for generic rerouting
+    'generic_reouting_method': 'simple'
 }
 
 # Run the model!
