@@ -494,10 +494,9 @@ class MyModel(ap.Model):
         nx.set_edge_attributes(self.model.G, 0, "temp_ppl_increase")
 
         """ Record a dynamic variable. """
-        if self.model.p.scenario in ["simple_compliance", "complex_compliance"]:
-            # self.agents.record('metric_path')
-            self.model.record('non_compliances')
-            self.model.record('compliances')
+        # self.agents.record('metric_path')
+        self.model.record('non_compliances')
+        self.model.record('compliances')
         
         # update fake date for temporal viz in qgis
         time = datetime.datetime(2000, 1, 1, self.step_counter * self.model.p.duration // 3600, self.step_counter * self.model.p.duration // 60, self.step_counter * self.model.p.duration % 60)
