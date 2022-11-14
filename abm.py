@@ -146,7 +146,7 @@ class Pedestrian(ap.Agent):
             'route_counter': self.route_counter,
             'density_threshold': self.density_threshold,
             'latest_node': self.metric_path[0],
-            'non-compliance': False,
+            'non_compliance': False,
             'compliance': False
         }
 
@@ -187,7 +187,7 @@ class Pedestrian(ap.Agent):
     def reset_location_compliance(self):
         """Resets location compliance values.
         """
-        self.location['non-compliance'] = False
+        self.location['non_compliance'] = False
         self.location['compliance'] = False 
         self.location['random_rerouting'] = False
     
@@ -204,7 +204,6 @@ class Pedestrian(ap.Agent):
             
             current_undirected_edge = None 
 
-            # use distance_penult_node_to_dest distance as remaining distance to only walk until destination point is reached
             is_on_penultimate_node = (len(self.metric_path) == 2)
             if is_on_penultimate_node:
                 # get next edge
@@ -309,7 +308,7 @@ class Pedestrian(ap.Agent):
 
         # TODO: Check if agents should be allowed to walk through forbidden paths as result of random rerouting, 
         # currently restricted by get_alternative_path() function
-        if(self.model.p.rand_reouting == 'regression' and self.generic_rerouting_regression(detour)): 
+        if(self.model.p.generic_reouting_method == 'regression' and self.generic_rerouting_regression(detour)): 
             self.metric_path = alt_path
             self.metric_path_length += detour
             self.distance_penult_node_to_dest = distance_penult_node_to_dest
@@ -375,8 +374,6 @@ class Pedestrian(ap.Agent):
             Boolean: True if the agent complies with the intervention, False if it does not comply
         """
         if self.model.p.scenario == 'simple_compliance': # always comply
-            self.location['compliance'] = True
-            self.model.compliances += 1
             return True
         else: # complex compliance scenario
             x = self.rng.random()
@@ -595,7 +592,8 @@ parameters = {
     # Scenario 2: 'simple_complicance' = Agents comply with every measure
     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
     'scenario': 'complex_compliance',
-    'rand_reouting': 'regression'
+    # Choose value from ['regression', 'simple'] for parameter to decide which method to use for generic rerouting
+    'generic_reouting_method': 'simple'
 }
 
 # Run the model!
