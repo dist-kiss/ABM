@@ -9,6 +9,7 @@ import datetime
 from collections import Counter
 import movement
 import math
+import numpy as np
 
 
 # Visualization
