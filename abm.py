@@ -26,7 +26,9 @@ class Pedestrian(ap.Agent):
 
         # Init random number generator for each agent using seed; for reproducibility
         seed = self.model.random.getrandbits(128)
+        destinationSeed = self.model.random.getrandbits(128)
         self.rng = random.Random(seed)
+        self.randomDestinationGenerator = np.random.default_rng(destinationSeed)
         
         # Initialize attributes
         # walking speed is based on average walking speed and its standard deviation
@@ -50,7 +52,7 @@ class Pedestrian(ap.Agent):
         self.route_counter = 0
 
         # Choose random origin and destination within street network
-        self.orig, self.dest = movement.get_random_org_dest(self.model.edges, seed, 250)
+        self.orig, self.dest = movement.get_random_org_dest(self.model.edges, self.randomDestinationGenerator, 250)
 
         # Get the closest nodes in the network for origin and destination
         self.orig_node_id = self.orig['nearer_node']
@@ -160,14 +162,11 @@ class Pedestrian(ap.Agent):
         # increase route counter
         self.route_counter += 1
 
-        # create seed for destination generator
-        seed = self.model.random.getrandbits(128)
-
         # use previous destination as origin
         self.orig = self.dest.copy()
 
         # Find new random destination within street network
-        self.dest = movement.get_random_dest(self.orig, self.model.edges, seed, 250)
+        self.dest = movement.get_random_dest(self.orig, self.model.edges, self.randomDestinationGenerator, 250)
 
         # Get the closest nodes in the network for origin and destination
         self.orig_node_id = self.orig['nearer_node']
