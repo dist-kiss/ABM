@@ -42,7 +42,7 @@ class Pedestrian(ap.Agent):
 
         # TODO: Justify risk_appetite value. Is this concept valid 
         # Higher values -> more willingness to not comply with measures
-        self.risk_appetite = self.rng.gauss(1, self.model.p.risk_appetite_std)
+        self.risk_appetite = self.rng.gauss(self.model.p.risk_appetite_mean, self.model.p.risk_appetite_std)
 
         # Initialize variables 
         self.num_detours = 0
@@ -378,7 +378,7 @@ class Pedestrian(ap.Agent):
             x = self.rng.random()
             forbidden = 1
             rel_tot_detour = detour / (self.len_traversed + self.metric_path_length)
-            z = 0.1899 + rel_tot_detour * 3.8243 - forbidden * 1.2794
+            z = self.model.p.w_constant + rel_tot_detour * self.model.p.w_rtd + forbidden * self.model.p.w_forbidden
             prop_non_compliance = 1 / (1 + math.exp(-z))
 
             if (self.model.p.density):
@@ -449,7 +449,7 @@ class Pedestrian(ap.Agent):
             self.network[current_node][next_node]["walkable"] = True
             return path, 0, self.distance_penult_node_to_dest
 
-class MyModel(ap.Model):
+class DistanceKeepingModel(ap.Model):
 
     def setup(self):
         self.create_graph(streets_gpkg=self.p.streets_path)
@@ -577,11 +577,13 @@ parameters = {
     'random_rerouting_probability': 0.235,
     # TODO: Calibrate risk appetite standard deviation
     'risk_appetite_std': 0.1,
+    'risk_appetite_mean': 1,
+    'w_constant': 0.1899,
+    'w_rtd': 3.8243,
+    'w_forbidden': -1.2794,
     'density': False,
     'impatience': False,
     'seed': 40,
-    'detour_weight': 0.1,
-    'remaining_length_weight': 50,
     'density_weight': 1,
     'impatience_weight': -0.5,
     'streets_path': "./input-data/quakenbrueck.gpkg",
@@ -595,6 +597,5 @@ parameters = {
     'generic_reouting_method': 'simple'
 }
 
-# Run the model!
-model = MyModel(parameters)
+model = DistanceKeepingModel(optimal_parameters)
 results = model.run()
