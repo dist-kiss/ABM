@@ -436,7 +436,9 @@ class Pedestrian(ap.Agent):
             next_edge = movement.get_directed_edge(self.model.G, self.model.nodes, alternative_path[0],alternative_path[1])
             if(next_edge['one_way_reversed']):
                 # iteratively call this function (until alternative path has no intervention on first edge)
-                return self.get_alternative_path(alternative_path, metric_path_length)
+                next_path, next_detour, next_distance_penult_node_to_dest = self.get_alternative_path(alternative_path, metric_path_length)
+                self.network[current_node][next_node]["walkable"] = True
+                return next_path, next_detour, next_distance_penult_node_to_dest
             else:
                 # reset walkability attribute of graph 
                 self.network[current_node][next_node]["walkable"] = True
