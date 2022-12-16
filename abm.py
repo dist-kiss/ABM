@@ -53,6 +53,7 @@ class Pedestrian(ap.Agent):
         self.remaining_dist_on_edge = 0
         self.len_traversed = 0
         self.route_counter = 0
+        self.init_shortest_path_length = 0
 
         # Choose random origin and destination within street network
         self.orig, self.dest = movement.get_random_org_dest(self.model.edges, self.randomDestinationGenerator, 250)
@@ -68,7 +69,7 @@ class Pedestrian(ap.Agent):
         # Add actual origin and destination to the node based path
         self.add_exact_orig_to_path()
         self.metric_path, self.metric_path_length, self.distance_penult_node_to_dest = self.add_exact_dest_to_path(self.metric_path, self.metric_path_length)
-
+        self.init_shortest_path_length = self.metric_path_length
         # set the location of the agent to its origin
         self.first_position()
 
@@ -181,7 +182,7 @@ class Pedestrian(ap.Agent):
         # Add actual origin and destination to the node based path
         self.add_exact_orig_to_path()
         self.metric_path, self.metric_path_length, self.distance_penult_node_to_dest = self.add_exact_dest_to_path(self.metric_path, self.metric_path_length)
-
+        self.init_shortest_path_length = self.metric_path_length
         # Calculate first position and attributes
         self.first_position()   
 
@@ -266,6 +267,8 @@ class Pedestrian(ap.Agent):
             if would_walk_beyond_next_node:
                 final_location = current_directed_edge['geometry'].interpolate(self.distance_penult_node_to_dest)
                 self.walkUntilNode(final_location)
+                nod = (self.len_traversed / self.init_shortest_path_length) - 1
+                self.model.NODs.append(nod)
                 # assign new destination to walk towards
                 self.assign_new_destination()
             else: # will not reach destination in this timestep
@@ -292,8 +295,8 @@ class Pedestrian(ap.Agent):
         # calculate alternative path and detour
         alt_path, detour, distance_penult_node_to_dest = self.get_alternative_path(self.metric_path, self.metric_path_length)
         
-        if self.model.p.scenario in ["simple_compliance", "complex_compliance"]:
-            if(next_edge['one_way_reversed']): # next street entry forbidden
+        if(next_edge['one_way_reversed']): # next street entry forbidden
+            if self.model.p.scenario in ["simple_compliance", "complex_compliance"]:
                 decides_to_comply = self.ows_evaluation(detour, next_edge)
                 if(decides_to_comply):
                     self.location['compliance'] = True
@@ -306,7 +309,9 @@ class Pedestrian(ap.Agent):
                 else: 
                     self.location['non_compliance'] = True
                     self.model.non_compliances += 1
-                return
+            else:
+                self.model.non_compliances += 1
+            return
 
         # TODO: Check if agents should be allowed to walk through forbidden paths as result of random rerouting, 
         # currently restricted by get_alternative_path() function
@@ -394,6 +399,7 @@ class Pedestrian(ap.Agent):
 
             # TODO: See initialisation of risk_appetite: Justify concept!
             prop_non_compliance = prop_non_compliance * self.risk_appetite
+            self.model.non_comp_probs.append(prop_non_compliance)
             if(x > prop_non_compliance):
                 return True
             else:
@@ -472,7 +478,8 @@ class DistanceKeepingModel(ap.Model):
         self.compliances = 0
         self.non_compliances = 0
         self.step_counter = 0
-
+        self.NODs = []
+        self.non_comp_probs = []
                     
     def step(self):
         """Call a method for every agent. 
@@ -518,11 +525,23 @@ class DistanceKeepingModel(ap.Model):
         self.edge_gdf.append(edges)
 
     def end(self):
-        """ Report an evaluation measure. """
+        self.mean_nod = np.mean(self.NODs)
+        self.std_nod = np.std(self.NODs)
+        if self.model.p.scenario == "complex_compliance":
+            self.mean_non_comp_prob = np.mean(self.non_comp_probs)
+            self.std_non_comp_prob = np.std(self.non_comp_probs)
+        else:
+            self.mean_non_comp_prob = 0
+            self.std_non_comp_prob = 0
 
-        """ Record a dynamic variable. """
-        if self.model.p.scenario in ["simple_compliance", "complex_compliance"]:
-            self.report(['non_compliances', 'compliances'])
+        """ Report an evaluation measure. """
+        self.report('mean_nod')
+        self.report('std_nod')
+        self.report('mean_non_comp_prob')
+        self.report('std_non_comp_prob')
+        self.report(['non_compliances', 'compliances'])
+        self.report('NODs')
+        self.report('non_comp_probs')
         # output density maximum per street
         nx.set_edge_attributes(self.model.G, self.max_density, "max_density")
         max_density_gdf = momepy.nx_to_gdf(self.model.G, points=False)
