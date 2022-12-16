@@ -9,7 +9,9 @@ import datetime
 from collections import Counter
 import movement
 import math
+import os
 import numpy as np
+from pathlib import Path
 
 
 # Visualization
@@ -515,17 +517,25 @@ class DistanceKeepingModel(ap.Model):
 
     def end(self):
         """ Report an evaluation measure. """
+
+        """ Record a dynamic variable. """
+        if self.model.p.scenario in ["simple_compliance", "complex_compliance"]:
+            self.report(['non_compliances', 'compliances'])
         # output density maximum per street
         nx.set_edge_attributes(self.model.G, self.max_density, "max_density")
         max_density_gdf = momepy.nx_to_gdf(self.model.G, points=False)
-        max_density_gdf.to_file('./output/max_density.gpkg', driver='GPKG', layer='Max Density Edges') 
+        i = 0
+        Path("./Experiment/output/%s" % self.model.p.scenario).mkdir(parents=True, exist_ok=True)
+        while os.path.exists("./Experiment/output/%s/max_density%d.gpkg" % (self.model.p.scenario, i)):
+            i += 1
+        max_density_gdf.to_file("./Experiment/output/%s/max_density%d.gpkg" % (self.model.p.scenario, i), driver='GPKG', layer='Max Density Edges') 
         # output position data as gpkg 
         all_positions = DataFrame(self.position_list) 
         final_gdf = geopandas.GeoDataFrame(all_positions, geometry=all_positions['geometry'], crs="EPSG:3857")
-        final_gdf.to_file('./output/positions.gpkg', driver='GPKG', layer='Agents_temporal') 
+        final_gdf.to_file('./Experiment/output/%s/positions%d.gpkg' % (self.model.p.scenario, i), driver='GPKG', layer='Agents_temporal') 
         # output edge data as gpkg 
         final_edge_gdf = concat(self.edge_gdf, ignore_index=True)
-        final_edge_gdf.to_file('./output/edges.gpkg', driver='GPKG', layer='Edges_temporal')
+        final_edge_gdf.to_file('./Experiment/output/%s/edges%d.gpkg' % (self.model.p.scenario, i), driver='GPKG', layer='Edges_temporal')
         if (self.p.logging):
             print("Compliances: " + str(self.compliances) + "; Non-Compliances: " + str(self.non_compliances))
         
@@ -567,9 +577,52 @@ class DistanceKeepingModel(ap.Model):
 
 
 # specify model parameters
-parameters = {
-    'agents': 400,
-    'steps': 100,
+# --------------------------------–-----
+# To run the model once using optimal parameters use the following code:
+
+# optimal_parameters = {
+#     'agents': 400,
+#     'steps': 100,
+#     'viz': False,
+#     'duration': 5,
+#     # Including participants walking through forbidden streets as result of random rerouting:
+#     # 'random_rerouting_probability': 0.28,
+#     # Excluding participants walking through forbidden streets as result of random rerouting:
+#     'random_rerouting_probability': 0.235,
+#     # TODO: Calibrate risk appetite standard deviation
+#     'risk_appetite_std': 0.1,
+#     'risk_appetite_mean': 1,
+#     'w_constant': 0.1899,
+#     'w_rtd': 3.8243,
+#     'w_forbidden': -1.2794,
+#     'density': False,
+#     'impatience': False,
+#     'seed': 40,
+#     'density_weight': 1,
+#     'impatience_weight': -0.5,
+#     'streets_path': "./input-data/quakenbrueck.gpkg",
+#     'logging': False,
+#     # Choose value from ['no_compliance', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
+#     # Scenario 1: 'no_compliance' = Agents behave like there are no measures 
+#     # Scenario 2: 'simple_complicance' = Agents comply with every measure
+#     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
+#     'scenario': 'complex_compliance',
+#     # Choose value from ['regression', 'simple'] for parameter to decide which method to use for generic rerouting
+#     'generic_reouting_method': 'simple'
+# }
+
+# model = DistanceKeepingModel(optimal_parameters)
+# results = model.run()
+# --------------------------------–-----
+
+
+
+# --------------------------------–-----
+# To perform experiment use commented code:
+
+exp_parameters = {
+    'agents': ap.Values(1000),
+    'steps': 250,
     'viz': False,
     'duration': 5,
     # Including participants walking through forbidden streets as result of random rerouting:
@@ -584,7 +637,7 @@ parameters = {
     'w_forbidden': -1.2794,
     'density': False,
     'impatience': False,
-    'seed': 40,
+    'seed': 42,
     'density_weight': 1,
     'impatience_weight': -0.5,
     'streets_path': "./input-data/quakenbrueck.gpkg",
@@ -593,10 +646,28 @@ parameters = {
     # Scenario 1: 'no_compliance' = Agents behave like there are no measures 
     # Scenario 2: 'simple_complicance' = Agents comply with every measure
     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
-    'scenario': 'complex_compliance',
+    'scenario': ap.Values('no_compliance', 'simple_compliance', 'complex_compliance'),
     # Choose value from ['regression', 'simple'] for parameter to decide which method to use for generic rerouting
     'generic_reouting_method': 'simple'
 }
 
-model = DistanceKeepingModel(optimal_parameters)
-results = model.run()
+sample = ap.Sample(exp_parameters, randomize=False)
+
+# Perform experiment
+exp = ap.Experiment(DistanceKeepingModel, sample, iterations=10, record=True)
+results = exp.run(n_jobs=-1, verbose=10)
+results.save(exp_name='Test_experiment', exp_id=None, path='Experiment', display=True)
+
+# --------------------------------–-----
+
+# --------------------------------–-----
+# To use external parameters for experiment use commented code:
+# external_parameters = "put_external_parameters_here"
+
+# sample = ap.Sample(external_parameters, randomize=False)
+
+# # Perform experiment
+# exp = ap.Experiment(DistanceKeepingModel, sample, iterations=1, record=True)
+# results = exp.run(n_jobs=-1, verbose = 10)
+# results.save(exp_name='Test_experiment', exp_id=None, path='Experiment', display=True)
+
