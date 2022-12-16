@@ -52,7 +52,7 @@ def generate_random_point_on_line(edges, rng):
             'dist_from_remote': dist_from_remote
             }
 
-def get_random_org_dest(edges, seed, min_dist):
+def get_random_org_dest(edges, rng, min_dist):
     """Create random origin, destination pair with minimum distance of min_dist between both points.
     
     Parameters
@@ -68,14 +68,13 @@ def get_random_org_dest(edges, seed, min_dist):
         Dicts for origin and destination and including nearest node id and id of wider away other node on edge, and distances to both. 
 
     """
-    rng = np.random.default_rng(seed)
     orig = generate_random_point_on_line(edges, rng)
     dest = generate_random_point_on_line(edges, rng)
     while orig['point'].distance(dest['point']) < min_dist:
         dest = generate_random_point_on_line(edges, rng)
     return orig, dest
 
-def get_random_dest(orig, edges, seed, min_dist):
+def get_random_dest(orig, edges, rng, min_dist):
     """Create random origin, destination pair with minimum distance of min_dist between both points.
     
     Parameters
@@ -91,7 +90,6 @@ def get_random_dest(orig, edges, seed, min_dist):
         Dicts for origin and destination and including nearest node id and id of wider away other node on edge, and distances to both. 
 
     """
-    rng = np.random.default_rng(seed)
     dest = generate_random_point_on_line(edges, rng)
     while orig['point'].distance(dest['point']) < min_dist:
         dest = generate_random_point_on_line(edges, rng)
