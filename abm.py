@@ -302,7 +302,7 @@ class Pedestrian(ap.Agent):
                     self.distance_penult_node_to_dest = distance_penult_node_to_dest
                     self.num_detours += 1
                 else: 
-                    self.location['non-compliance'] = True
+                    self.location['non_compliance'] = True
                     self.model.non_compliances += 1
                 return
 
