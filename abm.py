@@ -43,10 +43,6 @@ class Pedestrian(ap.Agent):
         # self.ows_threshold = 0.75 + self.rng.random() * 0.25
         # self.detour_threshold = 0.75 + self.rng.random() * 0.25
 
-        # TODO: Justify risk_appetite value. Is this concept valid 
-        # Higher values -> more willingness to not comply with measures
-        self.risk_appetite = self.rng.gauss(self.model.p.risk_appetite_mean, self.model.p.risk_appetite_std)
-
         # Initialize variables 
         self.num_detours = 0
         self.metric_path = []
@@ -405,8 +401,6 @@ class Pedestrian(ap.Agent):
             if (self.model.p.impatience):
                 prop_non_compliance += self.num_detours * self.model.p.impatience_weight
 
-            # TODO: See initialisation of risk_appetite: Justify concept!
-            prop_non_compliance = prop_non_compliance * self.risk_appetite
             self.non_comp_probs.append(prop_non_compliance)
             if(x > prop_non_compliance):
                 return True
@@ -623,9 +617,6 @@ class DistanceKeepingModel(ap.Model):
 #     # 'random_rerouting_probability': 0.28,
 #     # Excluding participants walking through forbidden streets as result of random rerouting:
 #     'random_rerouting_probability': 0.235,
-#     # TODO: Calibrate risk appetite standard deviation
-#     'risk_appetite_std': 0.1,
-#     'risk_appetite_mean': 1,
 #     'w_constant': 0.1899,
 #     'w_rtd': 3.8243,
 #     'w_forbidden': -1.2794,
@@ -656,7 +647,7 @@ class DistanceKeepingModel(ap.Model):
 # To perform experiment use commented code:
 
 exp_parameters = {
-    'agents': ap.Values(1000),
+    'agents': ap.Values(10),
     'steps': 250,
     'viz': False,
     'duration': 5,
@@ -664,9 +655,6 @@ exp_parameters = {
     # 'random_rerouting_probability': 0.28,
     # Excluding participants walking through forbidden streets as result of random rerouting:
     'random_rerouting_probability': 0.235,
-    # TODO: Calibrate risk appetite standard deviation
-    'risk_appetite_std': 0.1,
-    'risk_appetite_mean': 1,
     'w_constant': 0.1899,
     'w_rtd': 3.8243,
     'w_forbidden': -1.2794,
@@ -690,7 +678,7 @@ exp_parameters = {
 sample = ap.Sample(exp_parameters, randomize=False)
 
 # Perform experiment
-exp = ap.Experiment(DistanceKeepingModel, sample, iterations=10, record=True)
+exp = ap.Experiment(DistanceKeepingModel, sample, iterations=2, record=True)
 results = exp.run(n_jobs=-1, verbose=10)
 results.save(exp_name='Test_experiment', exp_id=exp_parameters['epoch_time'], path='Experiment', display=True)
 
