@@ -12,7 +12,7 @@ import math
 import os
 import numpy as np
 from pathlib import Path
-
+import time    
 
 # Visualization
 import matplotlib.pyplot as plt 
@@ -542,21 +542,19 @@ class DistanceKeepingModel(ap.Model):
         self.report(['non_compliances', 'compliances'])
         self.report('NODs')
         self.report('non_comp_probs')
+        # create output directory
+        Path("./Experiment/output/%d" % self.model.p.epoch_time).mkdir(parents=True, exist_ok=True)
         # output density maximum per street
         nx.set_edge_attributes(self.model.G, self.max_density, "max_density")
         max_density_gdf = momepy.nx_to_gdf(self.model.G, points=False)
-        i = 0
-        Path("./Experiment/output/%s" % self.model.p.scenario).mkdir(parents=True, exist_ok=True)
-        while os.path.exists("./Experiment/output/%s/max_density%d.gpkg" % (self.model.p.scenario, i)):
-            i += 1
-        max_density_gdf.to_file("./Experiment/output/%s/max_density%d.gpkg" % (self.model.p.scenario, i), driver='GPKG', layer='Max Density Edges') 
+        max_density_gdf.to_file("./Experiment/output/%d/max_density_%s.gpkg" % (self.model.p.epoch_time, (str(self.model._run_id[0]) + "_" + str(self.model._run_id[1]))), driver='GPKG', layer='Max Density Edges') 
         # output position data as gpkg 
         all_positions = DataFrame(self.position_list) 
         final_gdf = geopandas.GeoDataFrame(all_positions, geometry=all_positions['geometry'], crs="EPSG:3857")
-        final_gdf.to_file('./Experiment/output/%s/positions%d.gpkg' % (self.model.p.scenario, i), driver='GPKG', layer='Agents_temporal') 
+        final_gdf.to_file('./Experiment/output/%d/positions_%s.gpkg' % (self.model.p.epoch_time, (str(self.model._run_id[0]) + "_" + str(self.model._run_id[1]))), driver='GPKG', layer='Agents_temporal') 
         # output edge data as gpkg 
         final_edge_gdf = concat(self.edge_gdf, ignore_index=True)
-        final_edge_gdf.to_file('./Experiment/output/%s/edges%d.gpkg' % (self.model.p.scenario, i), driver='GPKG', layer='Edges_temporal')
+        final_edge_gdf.to_file('./Experiment/output/%d/edges_%s.gpkg' % (self.model.p.epoch_time, (str(self.model._run_id[0]) + "_" + str(self.model._run_id[1]))), driver='GPKG', layer='Edges_temporal')
         if (self.p.logging):
             print("Compliances: " + str(self.compliances) + "; Non-Compliances: " + str(self.non_compliances))
         
@@ -629,7 +627,8 @@ class DistanceKeepingModel(ap.Model):
 #     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
 #     'scenario': 'complex_compliance',
 #     # Choose value from ['regression', 'simple'] for parameter to decide which method to use for generic rerouting
-#     'generic_reouting_method': 'simple'
+#     'generic_reouting_method': 'simple',
+#     'epoch_time': int(time.time())
 # }
 
 # model = DistanceKeepingModel(optimal_parameters)
@@ -669,7 +668,8 @@ exp_parameters = {
     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
     'scenario': ap.Values('no_compliance', 'simple_compliance', 'complex_compliance'),
     # Choose value from ['regression', 'simple'] for parameter to decide which method to use for generic rerouting
-    'generic_reouting_method': 'simple'
+    'generic_reouting_method': 'simple',
+    'epoch_time': int(time.time())
 }
 
 sample = ap.Sample(exp_parameters, randomize=False)
@@ -677,7 +677,7 @@ sample = ap.Sample(exp_parameters, randomize=False)
 # Perform experiment
 exp = ap.Experiment(DistanceKeepingModel, sample, iterations=10, record=True)
 results = exp.run(n_jobs=-1, verbose=10)
-results.save(exp_name='Test_experiment', exp_id=None, path='Experiment', display=True)
+results.save(exp_name='Test_experiment', exp_id=exp_parameters['epoch_time'], path='Experiment', display=True)
 
 # --------------------------------–-----
 
