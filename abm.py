@@ -49,6 +49,11 @@ class Pedestrian(ap.Agent):
         self.init_shortest_path_length = 0
         self.non_comp_probs = []
         self.comp_probs = []
+        self.compliances = 0
+        self.non_compliances = 0
+        self.random_reroutings = 0
+        self.no_route_changes = 0
+
         # Choose random origin and destination within street network
         self.orig, self.dest = movement.get_random_org_dest(self.model.edges, self.randomDestinationGenerator, 250)
 
@@ -161,10 +166,6 @@ class Pedestrian(ap.Agent):
         # increase route counter
         self.route_counter += 1
 
-        # reset non-compliance probability array
-        self.non_comp_probs = []
-        self.comp_probs = []
-
         # use previous destination as origin
         self.orig = self.dest.copy()
 
@@ -193,7 +194,32 @@ class Pedestrian(ap.Agent):
         self.location['compliance'] = False 
         self.location['random_rerouting'] = False
         self.location['no_route_change'] = False
-    
+
+    def update_model_reporters(self, nod):
+        """Update model reporters and reset agent variables.
+        """
+        # add total path length (TPL), shortest path length (SPL) 
+        # and normalized observed detour (NOD)
+        self.model.TPLs.append(self.len_traversed)
+        self.model.SPLs.append(self.init_shortest_path_length)
+        self.model.NODs.append(nod)
+        # add non-compliance and compliance probablities of current route
+        self.model.non_comp_probs.extend(self.non_comp_probs)
+        self.model.comp_probs.extend(self.comp_probs)
+        # add counter numbers of several types of rerouting events of current route
+        # to global model counters
+        self.model.compliances += self.compliances
+        self.model.non_compliances += self.non_compliances
+        self.model.random_reroutings += self.random_reroutings
+        self.model.no_route_changes += self.no_route_changes
+        # reset values of variables
+        self.non_comp_probs = []
+        self.comp_probs = []
+        self.compliances = 0
+        self.non_compliances = 0 
+        self.random_reroutings = 0
+        self.no_route_changes = 0
+
     
     def check_next_node(self):
         """For agents that are on street intersection, evaluates next street for possible interventions.
@@ -267,13 +293,7 @@ class Pedestrian(ap.Agent):
                 final_location = current_directed_edge['geometry'].interpolate(self.distance_penult_node_to_dest)
                 self.walkUntilNode(final_location)
                 nod = (self.len_traversed / self.init_shortest_path_length) - 1
-                # add normalized observed detour (NOD) to model reporter
-                self.model.TPLs.append(self.len_traversed)
-                self.model.SPLs.append(self.init_shortest_path_length)
-                self.model.NODs.append(nod)
-                # add non-compliance probablities of current route to model reporter
-                self.model.non_comp_probs.extend(self.non_comp_probs)
-                self.model.comp_probs.extend(self.comp_probs)
+                self.update_model_reporters(nod)
                 # assign new destination to walk towards
                 self.assign_new_destination()
             else: # will not reach destination in this timestep
@@ -310,11 +330,11 @@ class Pedestrian(ap.Agent):
             # deviation + one_way_street = compliance
             if(one_way_street):
                 self.location['compliance'] = True
-                self.model.compliances += 1
+                self.compliances += 1
             # deviation + normal street = random rerouting
             else:
                 self.location['random_rerouting'] = True
-                self.model.random_reroutings += 1
+                self.random_reroutings += 1
             # replace initial path by alternative one
             self.metric_path = alt_path
             self.metric_path_length += detour
@@ -324,11 +344,11 @@ class Pedestrian(ap.Agent):
         # no deviation + one way street = non compliance
         elif(one_way_street):
             self.location['non_compliance'] = True
-            self.model.non_compliances += 1
+            self.non_compliances += 1
         # no deviation + normal street = no_route_change
         else: 
             self.location['no_route_change'] = True
-            self.model.no_route_changes += 1
+            self.no_route_changes += 1
 
 
 
