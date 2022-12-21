@@ -167,11 +167,12 @@ class Pedestrian(ap.Agent):
         # increase route counter
         self.route_counter += 1
 
-        # use previous destination as origin
-        self.orig = self.dest.copy()
+        # Assign new destination only:
+        # self.orig = self.dest.copy()
+        # self.dest = movement.get_random_dest(self.orig, self.model.edges, self.randomDestinationGenerator, 250)
 
-        # Find new random destination within street network
-        self.dest = movement.get_random_dest(self.orig, self.model.edges, self.randomDestinationGenerator, 250)
+        # Generate new origin and destination:
+        self.orig, self.dest = movement.get_random_org_dest(self.model.edges, self.randomDestinationGenerator, 250)
 
         # Get the closest nodes in the network for origin and destination
         self.orig_node_id = self.orig['nearer_node']
@@ -185,7 +186,7 @@ class Pedestrian(ap.Agent):
         self.metric_path, self.metric_path_length, self.distance_penult_node_to_dest = self.add_exact_dest_to_path(self.metric_path, self.metric_path_length)
         self.init_shortest_path_length = self.metric_path_length
         # Calculate first position and attributes
-        self.first_position()   
+        self.first_position()
 
                     
     def reset_location_compliance(self):
