@@ -39,9 +39,6 @@ class Pedestrian(ap.Agent):
         self.walking_speed = self.rng.gauss(1.25, 0.21)
         self.walking_distance = self.walking_speed * self.model.p.duration
         self.network = self.model.G.to_directed()
-        self.density_threshold = round( 0.03 + self.rng.random() * 0.07, 4)
-        # self.ows_threshold = 0.75 + self.rng.random() * 0.25
-        # self.detour_threshold = 0.75 + self.rng.random() * 0.25
 
         # Initialize variables 
         self.num_detours = 0
@@ -147,7 +144,6 @@ class Pedestrian(ap.Agent):
             'geometry': current_directed_edge['geometry'].interpolate(self.start_at_dist),
             'agentID': self.id,
             'route_counter': self.route_counter,
-            'density_threshold': self.density_threshold,
             'latest_node': self.metric_path[0],
             'non_compliance': False,
             'compliance': False,
@@ -337,35 +333,30 @@ class Pedestrian(ap.Agent):
 
 
     def rerouting_evaluation(self, detour, edge, ows):
-        """Evalutes whether agent complies with one way street intervention and returns decision as boolean.
+        """Evalutes whether agent reroutes or continues on its intended path based on one way street interventions and the detour of the alternative path 
+            Decision is returned as boolean.
             Formula F(x1,...,xn) for the chance to comply is:
-            F(detour, remaining_shortest_path_length = rspl, edge_density, impatience) 
-            = detour/rspl * detour_weight + edge_density * density_weight + impatience * impatience_weight
+            F(rtd=relative total detour, ows=one way street) = rtd * rtd_weight + ows * ows_weight
 
         Args:
             detour (float): The detour length the alternative option would result in 
-            edge (_type_): The one way street edge
+            edge (_type_): The edge belonging to the next intended street
+            ows (int): Presence of one way street on the next intended street (1 = ows, 0 = no ows)
 
         Returns:
-            Boolean: True if the agent complies with the intervention, False if it does not comply
+            Boolean: True if the agent reroutes, False if it stays on its intended route
         """
-        if self.model.p.scenario == 'simple_compliance' and ows == 1: # always comply in that scenario
+        if self.model.p.scenario == 'simple_compliance' and ows == 1: 
+            # always comply in simple_compliance scenario
             return True
         else:
             x = self.rng.random()
             rel_tot_detour = detour / (self.len_traversed + self.metric_path_length)
-            z = self.model.p.w_constant + rel_tot_detour * self.model.p.w_rtd + ows * self.model.p.w_forbidden
+            z = self.model.p.weight_constant + rel_tot_detour * self.model.p.weight_rtd + ows * self.model.p.weight_ows + edge['density'] * self.model.p.weight_density
             prop_non_compliance = 1 / (1 + math.exp(-z))
-
-            if (self.model.p.density):
-                prop_non_compliance += edge['density'] * self.model.p.density_weight
-                # self.density_threshold?
-
-            # TODO: Check if impatience is still a thing! If not delete code snippet
-            if (self.model.p.impatience):
-                prop_non_compliance += self.num_detours * self.model.p.impatience_weight
             
             if(ows):
+                # record compliance and non_compliance probabilities for model output
                 self.non_comp_probs.append(prop_non_compliance)
                 self.comp_probs.append(1 - prop_non_compliance)
 
@@ -404,23 +395,23 @@ class Pedestrian(ap.Agent):
         
         try:
             # compute alternative path and its length on subview
-            alternative_path = nx.dijkstra_path(view, source=current_node, target=destination, weight='mm_len')
-            length = nx.path_weight(view, alternative_path, weight='mm_len')
-            alternative_path, length, distance_penult_node_to_dest = self.add_exact_dest_to_path(alternative_path, length)
+            alt_path = nx.dijkstra_path(view, source=current_node, target=destination, weight='mm_len')
+            alt_length = nx.path_weight(view, alt_path, weight='mm_len')
+            alt_path, alt_length, alt_distance_penult_node_to_dest = self.add_exact_dest_to_path(alt_path, alt_length)
             # check whether next edge on alternative path is one way street (forbidden to enter)
-            next_edge = movement.get_directed_edge(self.model.G, self.model.nodes, alternative_path[0],alternative_path[1])
-            if(next_edge['one_way_reversed']):
+            alt_next_edge = movement.get_directed_edge(self.model.G, self.model.nodes, alt_path[0],alt_path[1])
+            if(alt_next_edge['one_way_reversed']):
                 # iteratively call this function (until alternative path has no intervention on first edge)
-                next_path, next_detour, next_distance_penult_node_to_dest = self.get_alternative_path(alternative_path, metric_path_length)
+                alt_path, alt_detour, alt_distance_penult_node_to_dest = self.get_alternative_path(alt_path, metric_path_length)
                 self.network[current_node][next_node]["walkable"] = True
-                return next_path, next_detour, next_distance_penult_node_to_dest
+                return alt_path, alt_detour, alt_distance_penult_node_to_dest
             else:
                 # reset walkability attribute of graph 
                 self.network[current_node][next_node]["walkable"] = True
                 if(self.model.p.logging):
                     # if logging: print alternative and current path lengths 
-                    print('alt: '+ str(length) + ' orig: ' + str(metric_path_length))
-                return alternative_path, length - metric_path_length, distance_penult_node_to_dest
+                    print('alt: '+ str(alt_length) + ' orig: ' + str(metric_path_length))
+                return alt_path, alt_length - metric_path_length, alt_distance_penult_node_to_dest
         
         # if there is no alternative path return inital path
         except (nx.NetworkXNoPath) as e:
@@ -596,14 +587,11 @@ class DistanceKeepingModel(ap.Model):
 #     # 'random_rerouting_probability': 0.28,
 #     # Excluding participants walking through forbidden streets as result of random rerouting:
 #     'random_rerouting_probability': 0.235,
-#     'w_constant': 0.1899,
-#     'w_rtd': 3.8243,
-#     'w_forbidden': -1.2794,
-#     'density': False,
-#     'impatience': False,
+#     'weight_constant': 0.1899,
+#     'weight_rtd': 3.8243,
+#     'weight_ows': -1.2794,
 #     'seed': 40,
-#     'density_weight': 1,
-#     'impatience_weight': -0.5,
+#     'weight_density': 0,
 #     'streets_path': "./input-data/quakenbrueck.gpkg",
 #     'logging': False,
 #     # Choose value from ['no_compliance', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
@@ -632,14 +620,11 @@ exp_parameters = {
     # 'random_rerouting_probability': 0.28,
     # Excluding participants walking through forbidden streets as result of random rerouting:
     'random_rerouting_probability': 0.235,
-    'w_constant': 0.1899,
-    'w_rtd': 3.8243,
-    'w_forbidden': -1.2794,
-    'density': False,
-    'impatience': False,
+    'weight_constant': 0.1899,
+    'weight_rtd': 3.8243,
+    'weight_ows': -1.2794,
     'seed': 42,
-    'density_weight': 1,
-    'impatience_weight': -0.5,
+    'weight_density': 0,
     'streets_path': "./input-data/quakenbrueck.gpkg",
     'logging': False,
     # Choose value from ['no_compliance', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
