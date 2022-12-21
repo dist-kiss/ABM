@@ -51,6 +51,7 @@ class Pedestrian(ap.Agent):
         self.route_counter = 0
         self.init_shortest_path_length = 0
         self.non_comp_probs = []
+        self.comp_probs = []
         # Choose random origin and destination within street network
         self.orig, self.dest = movement.get_random_org_dest(self.model.edges, self.randomDestinationGenerator, 250)
 
@@ -149,7 +150,9 @@ class Pedestrian(ap.Agent):
             'density_threshold': self.density_threshold,
             'latest_node': self.metric_path[0],
             'non_compliance': False,
-            'compliance': False
+            'compliance': False,
+            'no_route_change': False,
+            'random_rerouting': False
         }
 
 
@@ -164,6 +167,7 @@ class Pedestrian(ap.Agent):
 
         # reset non-compliance probability array
         self.non_comp_probs = []
+        self.comp_probs = []
 
         # use previous destination as origin
         self.orig = self.dest.copy()
@@ -192,6 +196,7 @@ class Pedestrian(ap.Agent):
         self.location['non_compliance'] = False
         self.location['compliance'] = False 
         self.location['random_rerouting'] = False
+        self.location['no_route_change'] = False
     
     
     def check_next_node(self):
@@ -200,9 +205,8 @@ class Pedestrian(ap.Agent):
 
         is_agent_on_node = (self.remaining_dist_on_edge == 0)
         if(is_agent_on_node):
-            if self.model.p.scenario in ["simple_compliance", "complex_compliance"]:
-                # agent left last edges, so reset compliance attributes
-                self.reset_location_compliance()
+            # agent left last edges, so reset compliance attributes
+            self.reset_location_compliance()
             
             current_undirected_edge = None 
 
@@ -273,6 +277,7 @@ class Pedestrian(ap.Agent):
                 self.model.NODs.append(nod)
                 # add non-compliance probablities of current route to model reporter
                 self.model.non_comp_probs.extend(self.non_comp_probs)
+                self.model.comp_probs.extend(self.comp_probs)
                 # assign new destination to walk towards
                 self.assign_new_destination()
             else: # will not reach destination in this timestep
@@ -299,79 +304,39 @@ class Pedestrian(ap.Agent):
         # calculate alternative path and detour
         alt_path, detour, distance_penult_node_to_dest = self.get_alternative_path(self.metric_path, self.metric_path_length)
         
-        if(next_edge['one_way_reversed']): # next street entry forbidden
-            if self.model.p.scenario in ["simple_compliance", "complex_compliance"]:
-                decides_to_comply = self.ows_evaluation(detour, next_edge)
-                if(decides_to_comply):
-                    self.location['compliance'] = True
-                    self.model.compliances += 1
-                    # replace initial path by alternative one
-                    self.metric_path = alt_path
-                    self.metric_path_length += detour
-                    self.distance_penult_node_to_dest = distance_penult_node_to_dest
-                    self.num_detours += 1
-                else: 
-                    self.location['non_compliance'] = True
-                    self.model.non_compliances += 1
-            else:
-                self.model.non_compliances += 1
-            return
-
-        # TODO: Check if agents should be allowed to walk through forbidden paths as result of random rerouting, 
-        # currently restricted by get_alternative_path() function
-        if(self.model.p.generic_reouting_method == 'regression' and self.generic_rerouting_regression(detour)): 
-            self.metric_path = alt_path
-            self.metric_path_length += detour
-            self.distance_penult_node_to_dest = distance_penult_node_to_dest
-            self.location['random_rerouting'] = True
-
-        elif(self.generic_rerouting_probability()):
-            self.metric_path = alt_path
-            self.metric_path_length += detour
-            self.distance_penult_node_to_dest = distance_penult_node_to_dest
-            self.location['random_rerouting'] = True
-
-    def generic_rerouting_probability(self):
-        """Evaluates at every node whether an agent would stay on his current path or take an alternative path.
-        The alternative path will be the second-shortest-path. The corresponding probability threshold can be modified
-        in the model parameters.
-
-        Returns
-            Boolean: True if the agent would take an alternative path, False if not.
-        """
-        # TODO: Check if probabilty should be replaced by regression!
-        # generate a random number between 0.0 and 1.0. This marks the probability, whether an agent takes an alternative path or not.
-        node_rerouting_probability = self.rng.random()
-        probability_threshold = self.model.p.random_rerouting_probability
+        # check for one way street
+        one_way_street = (1 if next_edge['one_way_reversed'] else 0)
         
-        if(node_rerouting_probability < probability_threshold):
-            return True
+        # evaluate whether to reroute or not
+        deviate_from_path = self.rerouting_evaluation(detour, next_edge, one_way_street)
 
-    def generic_rerouting_regression(self, detour):
-        """Evaluates at every node whether an agent would stay on his current path or take an alternative path.
-        The alternative path will be the second-shortest-path. The corresponding probability threshold can be modified
-        in the model parameters.
+        if(deviate_from_path):
+            # deviation + one_way_street = compliance
+            if(one_way_street):
+                self.location['compliance'] = True
+                self.model.compliances += 1
+            # deviation + normal street = random rerouting
+            else:
+                self.location['random_rerouting'] = True
+                self.model.random_reroutings += 1
+            # replace initial path by alternative one
+            self.metric_path = alt_path
+            self.metric_path_length += detour
+            self.distance_penult_node_to_dest = distance_penult_node_to_dest
+            self.num_detours += 1
 
-        Returns
-            Boolean: True if the agent would take an alternative path, False if not.
-        """
-        # generate a random number between 0.0 and 1.0. This marks the probability, whether an agent takes an alternative path or not.
-
-        x = self.rng.random()
-        rel_tot_detour = detour/(self.len_traversed + self.metric_path_length)
-        rel_curr_detour = detour/(self.metric_path_length)
-        z = -0.0957 + rel_tot_detour * 6.1942 - rel_curr_detour * 2.5212
-        prop_rerouting = 1 - 1/(1+ math.exp(-z))
-
-
-        if(x > prop_rerouting):
-            return False
+        # no deviation + one way street = non compliance
+        elif(one_way_street):
+            self.location['non_compliance'] = True
+            self.model.non_compliances += 1
+        # no deviation + normal street = no_route_change
         else: 
-            return True
+            self.location['no_route_change'] = True
+            self.model.no_route_changes += 1
 
 
 
-    def ows_evaluation(self, detour, edge):
+    def rerouting_evaluation(self, detour, edge, ows):
         """Evalutes whether agent complies with one way street intervention and returns decision as boolean.
             Formula F(x1,...,xn) for the chance to comply is:
             F(detour, remaining_shortest_path_length = rspl, edge_density, impatience) 
@@ -384,13 +349,12 @@ class Pedestrian(ap.Agent):
         Returns:
             Boolean: True if the agent complies with the intervention, False if it does not comply
         """
-        if self.model.p.scenario == 'simple_compliance': # always comply
+        if self.model.p.scenario == 'simple_compliance' and ows == 1: # always comply in that scenario
             return True
-        else: # complex compliance scenario
+        else:
             x = self.rng.random()
-            forbidden = 1
             rel_tot_detour = detour / (self.len_traversed + self.metric_path_length)
-            z = self.model.p.w_constant + rel_tot_detour * self.model.p.w_rtd + forbidden * self.model.p.w_forbidden
+            z = self.model.p.w_constant + rel_tot_detour * self.model.p.w_rtd + ows * self.model.p.w_forbidden
             prop_non_compliance = 1 / (1 + math.exp(-z))
 
             if (self.model.p.density):
@@ -400,13 +364,16 @@ class Pedestrian(ap.Agent):
             # TODO: Check if impatience is still a thing! If not delete code snippet
             if (self.model.p.impatience):
                 prop_non_compliance += self.num_detours * self.model.p.impatience_weight
+            
+            if(ows):
+                self.non_comp_probs.append(prop_non_compliance)
+                self.comp_probs.append(1 - prop_non_compliance)
 
-            self.non_comp_probs.append(prop_non_compliance)
             if(x > prop_non_compliance):
                 return True
             else:
                 # if logging: print probability, x and id of agent not complying
-                if(self.model.p.logging):
+                if(self.model.p.logging and ows):
                     print("P: " + str(prop_non_compliance) + "; X: " + str(x))
                     print("Non-Compliance, " + str(self.id))
                 return False 
@@ -479,6 +446,8 @@ class DistanceKeepingModel(ap.Model):
         self.edge_gdf = []
         self.compliances = 0
         self.non_compliances = 0
+        self.random_reroutings = 0
+        self.no_route_changes = 0
         self.step_counter = 0
         # Normalized observed detours
         self.NODs = []
@@ -487,6 +456,7 @@ class DistanceKeepingModel(ap.Model):
         # Total path lengths
         self.TPLs = []
         self.non_comp_probs = []
+        self.comp_probs = []
                     
     def step(self):
         """Call a method for every agent. 
@@ -510,10 +480,8 @@ class DistanceKeepingModel(ap.Model):
         nx.set_edge_attributes(self.model.G, 0, "temp_ppl_increase")
 
         """ Record a dynamic variable. """
-        if self.model.p.scenario in ["simple_compliance", "complex_compliance"]:
-            # self.agents.record('metric_path')
-            self.model.record('non_compliances')
-            self.model.record('compliances')
+        self.model.record('non_compliances')
+        self.model.record('compliances')
         
         # update fake date for temporal viz in qgis
         time = datetime.datetime(2000, 1, 1, self.step_counter * self.model.p.duration // 3600, self.step_counter * self.model.p.duration // 60, self.step_counter * self.model.p.duration % 60)
@@ -537,20 +505,28 @@ class DistanceKeepingModel(ap.Model):
         if self.model.p.scenario == "complex_compliance":
             self.mean_non_comp_prob = np.mean(self.non_comp_probs)
             self.std_non_comp_prob = np.std(self.non_comp_probs)
+            self.mean_comp_prob = np.mean(self.comp_probs)
+            self.std_comp_prob = np.std(self.comp_probs)
         else:
-            self.mean_non_comp_prob = 0
-            self.std_non_comp_prob = 0
+            self.mean_non_comp_prob = None
+            self.std_non_comp_prob = None
+            self.mean_comp_prob = None
+            self.std_comp_prob = None
+
 
         """ Report an evaluation measure. """
         self.report('mean_nod')
         self.report('std_nod')
         self.report('mean_non_comp_prob')
         self.report('std_non_comp_prob')
-        self.report(['non_compliances', 'compliances'])
+        self.report('mean_comp_prob')
+        self.report('std_comp_prob')
+        self.report(['non_compliances', 'compliances', 'no_route_changes', 'random_reroutings'])
         self.report('SPLs')
         self.report('TPLs')
         self.report('NODs')
         self.report('non_comp_probs')
+        self.report('comp_probs')
         # create output directory
         Path("./Experiment/output/%d" % self.model.p.epoch_time).mkdir(parents=True, exist_ok=True)
         # output density maximum per street
@@ -589,6 +565,9 @@ class DistanceKeepingModel(ap.Model):
         self.G = nx.Graph(momepy.gdf_to_nx(streets, approach='primal'))
         # Calculate degree of nodes
         self.G = momepy.node_degree(self.G, name='degree')
+        if(self.model.p.scenario == "no_compliance"):
+            nx.set_edge_attributes(self.G, False, "one_way_reversed")
+            nx.set_edge_attributes(self.G, False, "one_way")
         # Convert graph back to GeoDataFrames with nodes and edges
         self.nodes, self.edges, sw = momepy.nx_to_gdf(self.G, points=True, lines=True, spatial_weights=True)
         # set index column, and rename nodes in graph
@@ -632,8 +611,6 @@ class DistanceKeepingModel(ap.Model):
 #     # Scenario 2: 'simple_complicance' = Agents comply with every measure
 #     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
 #     'scenario': 'complex_compliance',
-#     # Choose value from ['regression', 'simple'] for parameter to decide which method to use for generic rerouting
-#     'generic_reouting_method': 'simple',
 #     'epoch_time': int(time.time())
 # }
 
@@ -647,7 +624,7 @@ class DistanceKeepingModel(ap.Model):
 # To perform experiment use commented code:
 
 exp_parameters = {
-    'agents': ap.Values(10),
+    'agents': ap.Values(1000),
     'steps': 250,
     'viz': False,
     'duration': 5,
@@ -670,15 +647,13 @@ exp_parameters = {
     # Scenario 2: 'simple_complicance' = Agents comply with every measure
     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
     'scenario': ap.Values('no_compliance', 'simple_compliance', 'complex_compliance'),
-    # Choose value from ['regression', 'simple'] for parameter to decide which method to use for generic rerouting
-    'generic_reouting_method': 'simple',
     'epoch_time': int(time.time())
 }
 
 sample = ap.Sample(exp_parameters, randomize=False)
 
 # Perform experiment
-exp = ap.Experiment(DistanceKeepingModel, sample, iterations=2, record=True)
+exp = ap.Experiment(DistanceKeepingModel, sample, iterations=10, record=True)
 results = exp.run(n_jobs=-1, verbose=10)
 results.save(exp_name='Test_experiment', exp_id=exp_parameters['epoch_time'], path='Experiment', display=True)
 
