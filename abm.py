@@ -49,10 +49,11 @@ class Pedestrian(ap.Agent):
         self.init_shortest_path_length = 0
         self.non_comp_probs = []
         self.comp_probs = []
-        self.compliances = 0
-        self.non_compliances = 0
-        self.random_reroutings = 0
-        self.no_route_changes = 0
+        self.compliance_nodes = []
+        self.non_compliance_nodes = []
+        self.random_rerouting_nodes = []
+        self.no_route_change_nodes = []
+
 
         # Choose random origin and destination within street network
         self.orig, self.dest = movement.get_random_org_dest(self.model.edges, self.randomDestinationGenerator, 250)
@@ -208,17 +209,26 @@ class Pedestrian(ap.Agent):
         self.model.comp_probs.extend(self.comp_probs)
         # add counter numbers of several types of rerouting events of current route
         # to global model counters
-        self.model.compliances += self.compliances
-        self.model.non_compliances += self.non_compliances
-        self.model.random_reroutings += self.random_reroutings
-        self.model.no_route_changes += self.no_route_changes
+        self.model.compliances += len(self.compliance_nodes)
+        self.model.non_compliances += len(self.non_compliance_nodes)
+        self.model.random_reroutings += len(self.random_rerouting_nodes)
+        self.model.no_route_changes += len(self.no_route_change_nodes)
+        # update compliance location counters
+        for node in self.compliance_nodes:
+            self.model.nodes.at[node, 'compliances'] +=1
+        for node in self.non_compliance_nodes:
+            self.model.nodes.at[node, 'non_compliances'] +=1
+        for node in self.random_rerouting_nodes:
+            self.model.nodes.at[node, 'random_reroutings'] +=1
+        for node in self.no_route_change_nodes:
+            self.model.nodes.at[node, 'no_route_changes'] +=1
         # reset values of variables
         self.non_comp_probs = []
         self.comp_probs = []
-        self.compliances = 0
-        self.non_compliances = 0 
-        self.random_reroutings = 0
-        self.no_route_changes = 0
+        self.compliance_nodes = []
+        self.non_compliance_nodes = [] 
+        self.random_rerouting_nodes = []
+        self.no_route_change_nodes = []
 
     
     def check_next_node(self):
@@ -330,11 +340,11 @@ class Pedestrian(ap.Agent):
             # deviation + one_way_street = compliance
             if(one_way_street):
                 self.location['compliance'] = True
-                self.compliances += 1
+                self.compliance_nodes.append(self.metric_path[0])
             # deviation + normal street = random rerouting
             else:
                 self.location['random_rerouting'] = True
-                self.random_reroutings += 1
+                self.random_rerouting_nodes.append(self.metric_path[0])
             # replace initial path by alternative one
             self.metric_path = alt_path
             self.metric_path_length += detour
@@ -344,12 +354,11 @@ class Pedestrian(ap.Agent):
         # no deviation + one way street = non compliance
         elif(one_way_street):
             self.location['non_compliance'] = True
-            self.non_compliances += 1
+            self.non_compliance_nodes.append(self.metric_path[0])
         # no deviation + normal street = no_route_change
         else: 
             self.location['no_route_change'] = True
-            self.no_route_changes += 1
-
+            self.no_route_change_nodes.append(self.metric_path[0])
 
 
     def rerouting_evaluation(self, detour, edge, ows):
@@ -454,6 +463,7 @@ class DistanceKeepingModel(ap.Model):
         
         # Create lists for position and edge data and compliance counter 
         self.position_list = []
+        self.node_list = []
         self.edge_gdf = []
         self.compliances = 0
         self.non_compliances = 0
@@ -549,8 +559,9 @@ class DistanceKeepingModel(ap.Model):
         final_gdf = geopandas.GeoDataFrame(all_positions, geometry=all_positions['geometry'], crs="EPSG:3857")
         final_gdf.to_file('./Experiment/output/%d/positions_%s.gpkg' % (self.model.p.epoch_time, (str(self.model._run_id[0]) + "_" + str(self.model._run_id[1]))), driver='GPKG', layer='Agents_temporal') 
         # output edge data as gpkg 
-        final_edge_gdf = concat(self.edge_gdf, ignore_index=True)
+        final_edge_gdf = concat(self.edge_gdf, ignore_index=True)        
         final_edge_gdf.to_file('./Experiment/output/%d/edges_%s.gpkg' % (self.model.p.epoch_time, (str(self.model._run_id[0]) + "_" + str(self.model._run_id[1]))), driver='GPKG', layer='Edges_temporal')
+        self.nodes.to_file('./Experiment/output/%d/compliance_locations_%s.gpkg' % (self.model.p.epoch_time, (str(self.model._run_id[0]) + "_" + str(self.model._run_id[1]))), driver='GPKG', layer='Compliance Occurences')
         if (self.p.logging):
             print("Compliances: " + str(self.compliances) + "; Non-Compliances: " + str(self.non_compliances))
         
@@ -584,6 +595,10 @@ class DistanceKeepingModel(ap.Model):
         # set index column, and rename nodes in graph
         self.nodes = self.nodes.set_index("nodeID", drop=False)
         self.nodes = self.nodes.rename_axis([None])
+        self.nodes['compliances'] = 0
+        self.nodes['non_compliances'] = 0
+        self.nodes['random_reroutings'] = 0
+        self.nodes['no_route_changes'] = 0
         self.G = nx.convert_node_labels_to_integers(self.G, first_label=0, ordering='default', label_attribute=None)
         nx.set_edge_attributes(self.G, 0, "ppl_count")
         nx.set_edge_attributes(self.G, 0, "temp_ppl_increase")
