@@ -54,7 +54,7 @@ class Pedestrian(ap.Agent):
         self.len_traversed = 0
         self.route_counter = 0
         self.init_shortest_path_length = 0
-
+        self.non_comp_probs = []
         # Choose random origin and destination within street network
         self.orig, self.dest = movement.get_random_org_dest(self.model.edges, self.randomDestinationGenerator, 250)
 
@@ -166,6 +166,9 @@ class Pedestrian(ap.Agent):
         # increase route counter
         self.route_counter += 1
 
+        # reset non-compliance probability array
+        self.non_comp_probs = []
+
         # use previous destination as origin
         self.orig = self.dest.copy()
 
@@ -268,7 +271,12 @@ class Pedestrian(ap.Agent):
                 final_location = current_directed_edge['geometry'].interpolate(self.distance_penult_node_to_dest)
                 self.walkUntilNode(final_location)
                 nod = (self.len_traversed / self.init_shortest_path_length) - 1
+                # add normalized observed detour (NOD) to model reporter
+                self.model.TPLs.append(self.len_traversed)
+                self.model.SPLs.append(self.init_shortest_path_length)
                 self.model.NODs.append(nod)
+                # add non-compliance probablities of current route to model reporter
+                self.model.non_comp_probs.extend(self.non_comp_probs)
                 # assign new destination to walk towards
                 self.assign_new_destination()
             else: # will not reach destination in this timestep
@@ -399,7 +407,7 @@ class Pedestrian(ap.Agent):
 
             # TODO: See initialisation of risk_appetite: Justify concept!
             prop_non_compliance = prop_non_compliance * self.risk_appetite
-            self.model.non_comp_probs.append(prop_non_compliance)
+            self.non_comp_probs.append(prop_non_compliance)
             if(x > prop_non_compliance):
                 return True
             else:
@@ -478,7 +486,12 @@ class DistanceKeepingModel(ap.Model):
         self.compliances = 0
         self.non_compliances = 0
         self.step_counter = 0
+        # Normalized observed detours
         self.NODs = []
+        # Shortest path lengths
+        self.SPLs = []
+        # Total path lengths
+        self.TPLs = []
         self.non_comp_probs = []
                     
     def step(self):
@@ -540,6 +553,8 @@ class DistanceKeepingModel(ap.Model):
         self.report('mean_non_comp_prob')
         self.report('std_non_comp_prob')
         self.report(['non_compliances', 'compliances'])
+        self.report('SPLs')
+        self.report('TPLs')
         self.report('NODs')
         self.report('non_comp_probs')
         # output density maximum per street
