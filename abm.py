@@ -54,24 +54,33 @@ class Pedestrian(ap.Agent):
         self.random_rerouting_nodes = []
         self.no_route_change_nodes = []
 
+        if(self.model.p.origin_destination_pairs): 
+            i = self.randomDestinationGenerator.integers(0, 3)
+            self.orig_node_id = self.model.p.origin_destination_pairs[i][0]
+            self.dest_node_id = self.model.p.origin_destination_pairs[i][1]
+            self.agent_compute_path(self.orig_node_id, self.dest_node_id)
+            self.init_shortest_path_length = self.metric_path_length
+            self.start_at_dist = 0
+            self.distance_penult_node_to_dest = self.model.G[self.metric_path[-2]][self.metric_path[-1]]['mm_len']
+            self.first_position()
+        else:
+            # Choose random origin and destination within street network
+            self.orig, self.dest = movement.get_random_org_dest(self.model.edges, self.randomDestinationGenerator, 250)
 
-        # Choose random origin and destination within street network
-        self.orig, self.dest = movement.get_random_org_dest(self.model.edges, self.randomDestinationGenerator, 250)
+            # Get the closest nodes in the network for origin and destination
+            self.orig_node_id = self.orig['nearer_node']
+            self.dest_node_id = self.dest['nearer_node']
+            #TODO: Place agents in the model at different times
+            
+            # Compute shortest path to destination
+            self.agent_compute_path(self.orig_node_id, self.dest_node_id)
 
-        # Get the closest nodes in the network for origin and destination
-        self.orig_node_id = self.orig['nearer_node']
-        self.dest_node_id = self.dest['nearer_node']
-        #TODO: Place agents in the model at different times
-        
-        # Compute shortest path to destination
-        self.agent_compute_path(self.orig_node_id, self.dest_node_id)
-
-        # Add actual origin and destination to the node based path
-        self.add_exact_orig_to_path()
-        self.metric_path, self.metric_path_length, self.distance_penult_node_to_dest = self.add_exact_dest_to_path(self.metric_path, self.metric_path_length)
-        self.init_shortest_path_length = self.metric_path_length
-        # set the location of the agent to its origin
-        self.first_position()
+            # Add actual origin and destination to the node based path
+            self.add_exact_orig_to_path()
+            self.metric_path, self.metric_path_length, self.distance_penult_node_to_dest = self.add_exact_dest_to_path(self.metric_path, self.metric_path_length)
+            self.init_shortest_path_length = self.metric_path_length
+            # set the location of the agent to its origin
+            self.first_position()
 
         
     def agent_compute_path(self, start_node, dest_node):
@@ -163,30 +172,41 @@ class Pedestrian(ap.Agent):
             Function uses previous destination as new origin and generates 
             new destination. Then calculates a new path between these and assigns 
             path to the agent. 
-        """        
+        """
         # increase route counter
         self.route_counter += 1
 
-        # Assign new destination only:
-        # self.orig = self.dest.copy()
-        # self.dest = movement.get_random_dest(self.orig, self.model.edges, self.randomDestinationGenerator, 250)
+        if(self.model.p.origin_destination_pairs): 
+            i = self.randomDestinationGenerator.integers(0, 3)
+            self.orig_node_id = self.model.p.origin_destination_pairs[i][0]
+            self.dest_node_id = self.model.p.origin_destination_pairs[i][1]
+            self.agent_compute_path(self.orig_node_id, self.dest_node_id)
+            self.init_shortest_path_length = self.metric_path_length
+            self.start_at_dist = 0
+            self.distance_penult_node_to_dest = self.model.G[self.metric_path[-2]][self.metric_path[-1]]['mm_len']
+            self.first_position()
 
-        # Generate new origin and destination:
-        self.orig, self.dest = movement.get_random_org_dest(self.model.edges, self.randomDestinationGenerator, 250)
+        else:
+            # Assign new destination only:
+            # self.orig = self.dest.copy()
+            # self.dest = movement.get_random_dest(self.orig, self.model.edges, self.randomDestinationGenerator, 250)
 
-        # Get the closest nodes in the network for origin and destination
-        self.orig_node_id = self.orig['nearer_node']
-        self.dest_node_id = self.dest['nearer_node']
-        
-        # Compute shortest path to destination
-        self.agent_compute_path(self.orig_node_id, self.dest_node_id)
+            # Generate new origin and destination:
+            self.orig, self.dest = movement.get_random_org_dest(self.model.edges, self.randomDestinationGenerator, 250)
 
-        # Add actual origin and destination to the node based path
-        self.add_exact_orig_to_path()
-        self.metric_path, self.metric_path_length, self.distance_penult_node_to_dest = self.add_exact_dest_to_path(self.metric_path, self.metric_path_length)
-        self.init_shortest_path_length = self.metric_path_length
-        # Calculate first position and attributes
-        self.first_position()
+            # Get the closest nodes in the network for origin and destination
+            self.orig_node_id = self.orig['nearer_node']
+            self.dest_node_id = self.dest['nearer_node']
+            
+            # Compute shortest path to destination
+            self.agent_compute_path(self.orig_node_id, self.dest_node_id)
+
+            # Add actual origin and destination to the node based path
+            self.add_exact_orig_to_path()
+            self.metric_path, self.metric_path_length, self.distance_penult_node_to_dest = self.add_exact_dest_to_path(self.metric_path, self.metric_path_length)
+            self.init_shortest_path_length = self.metric_path_length
+            # Calculate first position and attributes
+            self.first_position()
 
                     
     def reset_location_compliance(self):
@@ -427,7 +447,10 @@ class Pedestrian(ap.Agent):
             # compute alternative path and its length on subview
             alt_path = nx.dijkstra_path(view, source=current_node, target=destination, weight='mm_len')
             alt_length = nx.path_weight(view, alt_path, weight='mm_len')
-            alt_path, alt_length, alt_distance_penult_node_to_dest = self.add_exact_dest_to_path(alt_path, alt_length)
+            if(self.model.p.origin_destination_pairs):
+                alt_distance_penult_node_to_dest = self.model.G[alt_path[-2]][alt_path[-1]]['mm_len']
+            else:    
+                alt_path, alt_length, alt_distance_penult_node_to_dest = self.add_exact_dest_to_path(alt_path, alt_length)
             # check whether next edge on alternative path is one way street (forbidden to enter)
             alt_next_edge = movement.get_directed_edge(self.model.G, self.model.nodes, alt_path[0],alt_path[1])
             if(alt_next_edge['one_way_reversed']):
@@ -648,7 +671,7 @@ class DistanceKeepingModel(ap.Model):
 # To perform experiment use commented code:
 
 exp_parameters = {
-    'agents': ap.Values(1000),
+    'agents': ap.Values(6),
     'steps': 250,
     'viz': False,
     'duration': 5,
@@ -668,13 +691,14 @@ exp_parameters = {
     # Scenario 2: 'simple_complicance' = Agents comply with every measure
     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
     'scenario': ap.Values('no_compliance', 'simple_compliance', 'complex_compliance'),
-    'epoch_time': int(time.time())
+    'epoch_time': int(time.time()),
+    'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])])
 }
 
 sample = ap.Sample(exp_parameters, randomize=False)
 
 # Perform experiment
-exp = ap.Experiment(DistanceKeepingModel, sample, iterations=10, record=True)
+exp = ap.Experiment(DistanceKeepingModel, sample, iterations=2, record=True)
 results = exp.run(n_jobs=-1, verbose=10)
 results.save(exp_name='Test_experiment', exp_id=exp_parameters['epoch_time'], path='Experiment', display=True)
 
