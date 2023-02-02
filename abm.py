@@ -39,7 +39,9 @@ class Pedestrian(ap.Agent):
         self.walking_speed = self.rng.gauss(1.25, 0.21)
         self.walking_distance = self.walking_speed * self.model.p.duration
         self.network = self.model.G.to_directed()
-
+        self.constant_weight = self.rng.gauss(self.model.p.constant_weight_mean, self.model.p.constant_weight_sd)
+        self.rtd_weight = self.rng.gauss(self.model.p.rtd_weight_mean, self.model.p.rtd_weight_sd)
+        self.ows_weight = self.rng.gauss(self.model.p.ows_weight_mean, self.model.p.ows_weight_sd)
         # Initialize variables 
         self.num_detours = 0
         self.metric_path = []
@@ -402,7 +404,7 @@ class Pedestrian(ap.Agent):
         else:
             x = self.rng.random()
             rel_tot_detour = detour / (self.len_traversed + self.metric_path_length)
-            z = self.model.p.weight_constant + rel_tot_detour * self.model.p.weight_rtd + ows * self.model.p.weight_ows + edge['density'] * self.model.p.weight_density
+            z = self.constant_weight + rel_tot_detour * self.rtd_weight + ows * self.ows_weight + edge['density'] * self.model.p.weight_density
             prop_non_compliance = 1 / (1 + math.exp(-z))
             
             if(ows):
@@ -679,9 +681,15 @@ exp_parameters = {
     # 'random_rerouting_probability': 0.28,
     # Excluding participants walking through forbidden streets as result of random rerouting:
     'random_rerouting_probability': 0.235,
-    'weight_constant': 0.1899,
-    'weight_rtd': 3.8243,
-    'weight_ows': -1.2794,
+    'constant_weight_mean': 0.3424823265591154, 
+    'constant_weight_sd': 0.4042530941646003,
+    # 'weight_constant': 0.1899,
+    'rtd_weight_mean': 4.062769564671944, 
+    'rtd_weight_sd': 1.7983272569373019,
+    # 'weight_rtd': 3.8243,
+    'ows_weight_mean': -1.686987748677264, 
+    'ows_weight_sd': 0.453969999609177449,
+    # 'weight_ows': -1.2794,
     'seed': 42,
     'weight_density': 0,
     'streets_path': "./input-data/quakenbrueck.gpkg",
