@@ -84,6 +84,9 @@ class Pedestrian(ap.Agent):
             # set the location of the agent to its origin
             self.first_position()
 
+        self.init_pos = [self.location['geometry'].x - self.model.x_min, self.location['geometry'].y - self.model.y_min]
+
+
         
     def agent_compute_path(self, start_node, dest_node):
         """Calculate the shortest path from the agents current location to its destination and the length of the path.
@@ -168,6 +171,12 @@ class Pedestrian(ap.Agent):
             'random_rerouting': False
         }
 
+
+    def setup_pos(self, space):
+
+            self.space = space
+            self.neighbors = space.neighbors
+            self.pos = space.positions[self]
 
     def assign_new_destination(self):
         """Assigns a new destination to the agent. 
@@ -298,6 +307,8 @@ class Pedestrian(ap.Agent):
         self.remaining_dist_on_edge = 0
         # update location of agent accordingly
         self.location.update( [('latest_node', self.metric_path[0]),('geometry', next_location)] )
+        self.space.move_to(self, [self.location['geometry'].x - self.model.x_min, self.location['geometry'].y - self.model.y_min])
+
 
     def walkAlongStreet(self, current_directed_edge, edge_length):
         """Simulate agent walking along the street for duration of one time step. 
@@ -312,6 +323,8 @@ class Pedestrian(ap.Agent):
         # update location of agent accordingly
         next_location = current_directed_edge['geometry'].interpolate(edge_length - self.remaining_dist_on_edge)
         self.location.update([('geometry', next_location)])
+        self.space.move_to(self, [self.location['geometry'].x - self.model.x_min, self.location['geometry'].y - self.model.y_min])
+
 
     def get_next_position(self):
         """Calculates the position of an agent after the next timestep, dependent on the duration 
@@ -329,6 +342,7 @@ class Pedestrian(ap.Agent):
                 self.update_model_reporters(nod)
                 # assign new destination to walk towards
                 self.assign_new_destination()
+                self.space.move_to(self, [self.location['geometry'].x - self.model.x_min, self.location['geometry'].y - self.model.y_min])
             else: # will not reach destination in this timestep
                 self.walkAlongStreet(current_directed_edge, self.distance_penult_node_to_dest)
 
@@ -484,8 +498,6 @@ class DistanceKeepingModel(ap.Model):
         if self.p.viz:
             self.visualize_model()
 
-        # Create a list of agents 
-        self.agents = ap.AgentList(self, self.p.agents, Pedestrian)
         
         # Create lists for position and edge data and compliance counter 
         self.position_list = []
@@ -504,6 +516,19 @@ class DistanceKeepingModel(ap.Model):
         self.TPLs = []
         self.non_comp_probs = []
         self.comp_probs = []
+
+        self.width = math.ceil(886072.6897017769515514 - 884895.6310000000521541)
+        self.x_min = 884895.6310000000521541
+        self.height = math.ceil(6924018.9868618501350284 - 6922980.4000000003725290)
+        self.y_min = 6922980.4000000003725290
+
+        # Create a list of agents 
+        self.agents = ap.AgentList(self, self.p.agents, Pedestrian)
+
+        self.space = ap.Space(self, shape=[self.width, self.height])
+        self.space.add_agents(self.agents, self.agents.init_pos)
+        self.agents.setup_pos(self.space)
+
                     
     def step(self):
         """Call a method for every agent. 
@@ -703,13 +728,89 @@ exp_parameters = {
     'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])])
 }
 
-sample = ap.Sample(exp_parameters, randomize=False)
+# sample = ap.Sample(exp_parameters, randomize=False)
 
-# Perform experiment
-exp = ap.Experiment(DistanceKeepingModel, sample, iterations=2, record=True)
-results = exp.run(n_jobs=-1, verbose=10)
-results.save(exp_name='Test_experiment', exp_id=exp_parameters['epoch_time'], path='Experiment', display=True)
+# # Perform experiment
+# exp = ap.Experiment(DistanceKeepingModel, sample, iterations=2, record=True)
+# results = exp.run(n_jobs=-1, verbose=10)
+# results.save(exp_name='Test_experiment', exp_id=exp_parameters['epoch_time'], path='Experiment', display=True)
 
+
+
+# def my_plot(model, ax):
+#     pass  # Call pyplot functions here
+
+# fig, ax = plt.subplots()
+# my_model = DistanceKeepingModel(exp_parameters)
+# animation = ap.animate(my_model, fig, ax, my_plot)
+
+
+anim_parameters = {
+    'agents': 500,
+    'steps': 250,
+    'viz': False,
+    'duration': 5,
+    # Including participants walking through forbidden streets as result of random rerouting:
+    # 'random_rerouting_probability': 0.28,
+    # Excluding participants walking through forbidden streets as result of random rerouting:
+    'random_rerouting_probability': 0.235,
+    'constant_weight_mean': 0.3424823265591154, 
+    'constant_weight_sd': 0.4042530941646003,
+    # 'weight_constant': 0.1899,
+    'rtd_weight_mean': 4.062769564671944, 
+    'rtd_weight_sd': 1.7983272569373019,
+    # 'weight_rtd': 3.8243,
+    'ows_weight_mean': -1.686987748677264, 
+    'ows_weight_sd': 0.453969999609177449,
+    # 'weight_ows': -1.2794,
+    'seed': 42,
+    'weight_density': 0,
+    'streets_path': "./input-data/quakenbrueck.gpkg",
+    'x_min': 884895.6310000000521541,
+    'y_min': 6922980.4000000003725290,
+    'logging': False,
+    # Choose value from ['no_compliance', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
+    # Scenario 1: 'no_compliance' = Agents behave like there are no measures 
+    # Scenario 2: 'simple_complicance' = Agents comply with every measure
+    # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
+    'scenario': 'complex_compliance',
+    'epoch_time': int(time.time()),
+    'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])])
+}
+
+from IPython.display import HTML
+# HTML(animation.to_jshtml())
+
+def animation_plot_single(m, ax):
+    ndim = 2
+    ax.set_title(f"Boids Flocking Model {ndim}D t={m.t}")
+    pos = m.space.positions.values()
+    pos = np.array(list(pos)).T  # Transform
+    lines = m.edges.translate(xoff=-m.x_min, yoff=-m.y_min, zoff=0.0)
+    lines.plot(ax=ax,color = 'green', label = 'network', zorder=1)
+    ax.scatter(*pos, s=2, c='black', zorder=2)
+    ax.set_xlim(0, m.width)
+    ax.set_ylim(0, m.height)
+    ax.set_axis_off()
+
+def animation_plot(m, p):
+    projection = None
+    fig = plt.figure(figsize=(7,7))
+    ax = fig.add_subplot(111, projection=projection)
+    # newax = fig.add_axes(ax.get_position())
+    # newax.patch.set_visible(False)
+    # streets = geopandas.read_file(anim_parameters['streets_path'])
+    # lines = streets.translate(xoff=-anim_parameters['x_min'], yoff=-anim_parameters['y_min'], zoff=0.0)
+    # lines.plot(ax=newax,color = 'green', label = 'network', zorder=1)
+    animation = ap.animate(m(p), fig, ax, animation_plot_single)    
+    with open("data_%d.html" % m(p).p.epoch_time, "w") as file:
+        file.write(animation.to_jshtml(fps=10))
+    # return HTML(animation.to_jshtml(fps=20))
+import matplotlib
+matplotlib.rcParams['animation.embed_limit'] = 2**128
+
+animation_plot(DistanceKeepingModel, anim_parameters)
+print("Done")
 # --------------------------------–-----
 
 # --------------------------------–-----
