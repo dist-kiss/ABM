@@ -219,7 +219,7 @@ class Pedestrian(ap.Agent):
             # Calculate first position and attributes
             self.first_position()
 
-                    
+
     def reset_location_compliance(self):
         """Resets location compliance values.
         """
@@ -473,12 +473,12 @@ class Pedestrian(ap.Agent):
                 alt_distance_penult_node_to_dest = self.model.G[alt_path[-2]][alt_path[-1]]['mm_len']
             else:    
                 alt_path, alt_length, alt_distance_penult_node_to_dest = self.add_exact_dest_to_path(alt_path, alt_length)
-                # reset walkability attribute of graph 
-                self.network[current_node][next_node]["walkable"] = True
-                if(self.model.p.logging):
-                    # if logging: print alternative and current path lengths 
-                    print('alt: '+ str(alt_length) + ' orig: ' + str(metric_path_length))
-                return alt_path, alt_length - metric_path_length, alt_distance_penult_node_to_dest
+            # reset walkability attribute of graph
+            self.network[current_node][next_node]["walkable"] = True
+            if(self.model.p.logging):
+                # if logging: print alternative and current path lengths
+                print('alt: '+ str(alt_length) + ' orig: ' + str(metric_path_length))
+            return alt_path, alt_length - metric_path_length, alt_distance_penult_node_to_dest
         
         # if there is no alternative path return inital path
         except (nx.NetworkXNoPath) as e:
@@ -700,8 +700,8 @@ class DistanceKeepingModel(ap.Model):
 # To perform experiment use commented code:
 
 exp_parameters = {
-    'agents': ap.Values(6),
-    'steps': 250,
+    'agents': 1000,
+    'steps': 500,
     'viz': False,
     'duration': 5,
     # Including participants walking through forbidden streets as result of random rerouting:
@@ -727,29 +727,21 @@ exp_parameters = {
     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
     'scenario': ap.Values('no_compliance', 'simple_compliance', 'complex_compliance'),
     'epoch_time': int(time.time()),
-    'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])])
+    'origin_destination_pairs': False,
+    # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])])
 }
 
-# sample = ap.Sample(exp_parameters, randomize=False)
+sample = ap.Sample(exp_parameters, randomize=False)
 
-# # Perform experiment
-# exp = ap.Experiment(DistanceKeepingModel, sample, iterations=2, record=True)
-# results = exp.run(n_jobs=-1, verbose=10)
-# results.save(exp_name='Test_experiment', exp_id=exp_parameters['epoch_time'], path='Experiment', display=True)
+# Perform experiment
+exp = ap.Experiment(DistanceKeepingModel, sample, iterations=10, record=True)
+results = exp.run(n_jobs=-1, verbose=10)
+results.save(exp_name='Test_experiment', exp_id=exp_parameters['epoch_time'], path='Experiment', display=True)
 
-
-
-# def my_plot(model, ax):
-#     pass  # Call pyplot functions here
-
-# fig, ax = plt.subplots()
-# my_model = DistanceKeepingModel(exp_parameters)
-# animation = ap.animate(my_model, fig, ax, my_plot)
-
-
+#  ------ ANIMATION ------------------------
 anim_parameters = {
-    'agents': 500,
-    'steps': 250,
+    'agents': 100,
+    'steps': 50,
     'viz': False,
     'duration': 5,
     # Including participants walking through forbidden streets as result of random rerouting:
@@ -777,15 +769,15 @@ anim_parameters = {
     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
     'scenario': 'complex_compliance',
     'epoch_time': int(time.time()),
-    'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])])
+    'origin_destination_pairs': False,
+    # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])])
 }
 
 from IPython.display import HTML
-# HTML(animation.to_jshtml())
 
 def animation_plot_single(m, ax):
     ndim = 2
-    ax.set_title(f"Boids Flocking Model {ndim}D t={m.t}")
+    ax.set_title(f"Dist-KISS Model {ndim}D t={m.t}")
     pos = m.space.positions.values()
     pos = np.array(list(pos)).T  # Transform
     lines = m.edges.translate(xoff=-m.x_min, yoff=-m.y_min, zoff=0.0)
@@ -799,11 +791,6 @@ def animation_plot(m, p):
     projection = None
     fig = plt.figure(figsize=(7,7))
     ax = fig.add_subplot(111, projection=projection)
-    # newax = fig.add_axes(ax.get_position())
-    # newax.patch.set_visible(False)
-    # streets = geopandas.read_file(anim_parameters['streets_path'])
-    # lines = streets.translate(xoff=-anim_parameters['x_min'], yoff=-anim_parameters['y_min'], zoff=0.0)
-    # lines.plot(ax=newax,color = 'green', label = 'network', zorder=1)
     animation = ap.animate(m(p), fig, ax, animation_plot_single)    
     with open("data_%d.html" % m(p).p.epoch_time, "w") as file:
         file.write(animation.to_jshtml(fps=10))
@@ -811,11 +798,11 @@ def animation_plot(m, p):
 import matplotlib
 matplotlib.rcParams['animation.embed_limit'] = 2**128
 
-animation_plot(DistanceKeepingModel, anim_parameters)
+# animation_plot(DistanceKeepingModel, anim_parameters)
 print("Done")
 # --------------------------------–-----
 
-# --------------------------------–-----
+# ---------------   EXTERNAL PARAMETERS   -----------------–-----
 # To use external parameters for experiment use commented code:
 # external_parameters = "put_external_parameters_here"
 
