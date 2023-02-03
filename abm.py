@@ -373,6 +373,12 @@ class Pedestrian(ap.Agent):
         # evaluate whether to reroute or not
         deviate_from_path = self.rerouting_evaluation(detour, next_edge, one_way_street)
 
+        # if alternative route is forbidden, re-evaluate decision to reroute
+        alt_next_edge = movement.get_directed_edge(self.model.G, self.model.nodes, alt_path[0],alt_path[1])
+        is_alt_path_forbidden = alt_next_edge['one_way_reversed']
+        if(is_alt_path_forbidden):
+            deviate_from_path = not(self.rerouting_evaluation(-detour, alt_next_edge, 1))
+
         if(deviate_from_path):
             # deviation + one_way_street = compliance
             if(one_way_street):
@@ -467,14 +473,6 @@ class Pedestrian(ap.Agent):
                 alt_distance_penult_node_to_dest = self.model.G[alt_path[-2]][alt_path[-1]]['mm_len']
             else:    
                 alt_path, alt_length, alt_distance_penult_node_to_dest = self.add_exact_dest_to_path(alt_path, alt_length)
-            # check whether next edge on alternative path is one way street (forbidden to enter)
-            alt_next_edge = movement.get_directed_edge(self.model.G, self.model.nodes, alt_path[0],alt_path[1])
-            if(alt_next_edge['one_way_reversed']):
-                # iteratively call this function (until alternative path has no intervention on first edge)
-                alt_path, alt_detour, alt_distance_penult_node_to_dest = self.get_alternative_path(alt_path, metric_path_length)
-                self.network[current_node][next_node]["walkable"] = True
-                return alt_path, alt_detour, alt_distance_penult_node_to_dest
-            else:
                 # reset walkability attribute of graph 
                 self.network[current_node][next_node]["walkable"] = True
                 if(self.model.p.logging):
