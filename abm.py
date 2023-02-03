@@ -543,7 +543,8 @@ class DistanceKeepingModel(ap.Model):
         ppl_count = Counter(nx.get_edge_attributes(self.model.G, "ppl_count"))
         temp_count = Counter(nx.get_edge_attributes(self.model.G, "temp_ppl_increase"))
         length = nx.get_edge_attributes(self.model.G, "mm_len")
-        density = dict(Counter({key : ppl_count[key] / length[key] for key in ppl_count}))
+        width = nx.get_edge_attributes(self.model.G, "sidewalk_width")
+        density = dict(Counter({key : ppl_count[key] / (length[key] * width[key]) for key in ppl_count}))
         ppl_count.update(temp_count)
         ppl_count=dict(ppl_count)
         self.max_density = {k:max(density.get(k,float('-inf')), self.max_density.get(k, float('-inf'))) for k in density.keys()}
@@ -634,6 +635,9 @@ class DistanceKeepingModel(ap.Model):
         """
         # Read street network as geopackage and convert it to GeoDataFrame
         streets = geopandas.read_file(streets_gpkg)
+        # add default sidwalk_width of 1.5m if none is given
+        mask = streets['sidewalk_width'].isna()
+        streets.loc[mask, 'sidewalk_width'] = 1.5
         # Transform GeoDataFrame to networkx Graph
         self.G = nx.Graph(momepy.gdf_to_nx(streets, approach='primal'))
         # Calculate degree of nodes
@@ -717,7 +721,7 @@ exp_parameters = {
     # 'weight_ows': -1.2794,
     'seed': 42,
     'weight_density': 0,
-    'streets_path': "./input-data/quakenbrueck.gpkg",
+    'streets_path': "./input-data/quakenbrueck_street_width.gpkg",
     'logging': False,
     # Choose value from ['no_compliance', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
     # Scenario 1: 'no_compliance' = Agents behave like there are no measures 
@@ -765,7 +769,7 @@ anim_parameters = {
     # 'weight_ows': -1.2794,
     'seed': 42,
     'weight_density': 0,
-    'streets_path': "./input-data/quakenbrueck.gpkg",
+    'streets_path': "./input-data/quakenbrueck_street_width.gpkg",
     'x_min': 884895.6310000000521541,
     'y_min': 6922980.4000000003725290,
     'logging': False,
