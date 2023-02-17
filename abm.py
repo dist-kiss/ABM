@@ -634,8 +634,12 @@ class DistanceKeepingModel(ap.Model):
         # Read street network as geopackage and convert it to GeoDataFrame
         streets = geopandas.read_file(streets_gpkg)
         # add default sidwalk_width of 1.5m if none is given
-        mask = streets['sidewalk_width'].isna()
-        streets.loc[mask, 'sidewalk_width'] = 1.5
+        mask_res = streets['highway'] == 'residantial'
+        mask_path = streets['highway'] == 'path'
+        mask_living = streets['highway'] == 'living_street'
+        streets.loc[mask_res, 'sidewalk_width'] = 5
+        streets.loc[mask_path, 'sidewalk_width'] = 3
+        streets.loc[mask_living, 'sidewalk_width'] = 10
         # Transform GeoDataFrame to networkx Graph
         self.G = nx.Graph(momepy.gdf_to_nx(streets, approach='primal'))
         # Calculate degree of nodes
