@@ -36,7 +36,7 @@ class Pedestrian(ap.Agent):
         # Initialize attributes
         # walking speed is based on average walking speed and its standard deviation
         # Source: Satish Chandra and Anish Khumar Bharti 2013, p. 662, "Speed Distribution Curves for Pedestrians during Walking and Crossing"
-        self.walking_speed = self.rng.gauss(1.25, 0.21)
+        self.walking_speed = self.rng.gauss(self.model.p.walking_speed_mean, self.model.p.walking_speed_std)
         self.walking_distance = self.walking_speed * self.model.p.duration
         self.network = self.model.G.to_directed()
         self.constant_weight = self.rng.gauss(self.model.p.constant_weight_mean, self.model.p.constant_weight_sd)
@@ -725,6 +725,8 @@ exp_parameters = {
     'weight_density': 0,
     'streets_path': "./input-data/quakenbrueck_street_width.gpkg",
     'logging': False,
+    'walking_speed_mean': 1.25,
+    'walking_speed_std': 0.21,
     # Choose value from ['no_compliance', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
     # Scenario 1: 'no_compliance' = Agents behave like there are no measures 
     # Scenario 2: 'simple_complicance' = Agents comply with every measure
