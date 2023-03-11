@@ -69,6 +69,18 @@ class Pedestrian(ap.Agent):
             # Choose random origin and destination within street network
             self.orig, self.dest = movement.get_random_org_dest(self.model.edges, self.randomDestinationGenerator, 250)
 
+            print(f"Destination of Agent {self.id}: {self.dest['point']}\n")
+            # if self.id == 1:
+            #     print(f"Destination of Agent {self.id}: {self.dest['point']}\n")
+            # if self.id == 3:
+            #     print(f"Destination of Agent {self.id}: {self.dest['point']}\n")
+            # if self.id == 7:
+            #     print(f"Destination of Agent {self.id}: {self.dest['point']}\n")
+            # if self.id == 25:
+            #     print(f"Destination of Agent {self.id}: {self.dest['point']}\n")
+            # if self.id == 89:
+            #     print(f"Destination of Agent {self.id}: {self.dest['point']}\n")
+
             # Get the closest nodes in the network for origin and destination
             self.orig_node_id = self.orig['nearer_node']
             self.dest_node_id = self.dest['nearer_node']
@@ -342,6 +354,17 @@ class Pedestrian(ap.Agent):
                 self.update_model_reporters(nod)
                 # assign new destination to walk towards
                 self.assign_new_destination()
+                print(f"Destination of Agent {self.id} after assigning new destination: {self.dest['point']}\n")
+                # if self.id == 1:
+                #     print(f"Destination of Agent {self.id} after assigning new destination: {self.dest['point']}\n")
+                # if self.id == 3:
+                #     print(f"Destination of Agent {self.id} after assigning new destination: {self.dest['point']}\n")
+                # if self.id == 7:
+                #     print(f"Destination of Agent {self.id} after assigning new destination: {self.dest['point']}\n")
+                # if self.id == 25:
+                #     print(f"Destination of Agent {self.id} after assigning new destination: {self.dest['point']}\n")
+                # if self.id == 89:
+                #     print(f"Destination of Agent {self.id} after assigning new destination: {self.dest['point']}\n")
                 self.space.move_to(self, [self.location['geometry'].x - self.model.x_min, self.location['geometry'].y - self.model.y_min])
             else: # will not reach destination in this timestep
                 self.walkAlongStreet(current_directed_edge, self.distance_penult_node_to_dest)
@@ -426,7 +449,6 @@ class Pedestrian(ap.Agent):
             rel_tot_detour = detour / (self.len_traversed + self.metric_path_length)
             z = self.constant_weight + rel_tot_detour * self.rtd_weight + ows * self.ows_weight + edge['density'] * self.model.p.weight_density
             prop_non_compliance = 1 / (1 + math.exp(-z))
-            
             if(ows):
                 # record compliance and non_compliance probabilities for model output
                 self.non_comp_probs.append(prop_non_compliance)
@@ -573,9 +595,11 @@ class DistanceKeepingModel(ap.Model):
     def end(self):
         self.mean_nod = np.mean(self.NODs)
         self.std_nod = np.std(self.NODs)
+        self.var_nod = np.var(self.NODs)
         if self.model.p.scenario == "complex_compliance":
             self.mean_non_comp_prob = np.mean(self.non_comp_probs)
             self.std_non_comp_prob = np.std(self.non_comp_probs)
+            self.var_non_comp_prob = np.var(self.non_comp_probs)
             self.mean_comp_prob = np.mean(self.comp_probs)
             self.std_comp_prob = np.std(self.comp_probs)
         else:
@@ -588,8 +612,10 @@ class DistanceKeepingModel(ap.Model):
         """ Report an evaluation measure. """
         self.report('mean_nod')
         self.report('std_nod')
+        self.report('var_nod')
         self.report('mean_non_comp_prob')
         self.report('std_non_comp_prob')
+        self.report('var_non_comp_prob')
         self.report('mean_comp_prob')
         self.report('std_comp_prob')
         self.report(['non_compliances', 'compliances', 'no_route_changes', 'random_reroutings'])
@@ -634,7 +660,7 @@ class DistanceKeepingModel(ap.Model):
         # Read street network as geopackage and convert it to GeoDataFrame
         streets = geopandas.read_file(streets_gpkg)
         # add default sidwalk_width of 1.5m if none is given
-        mask_res = streets['highway'] == 'residantial'
+        mask_res = streets['highway'] == 'residential'
         mask_path = streets['highway'] == 'path'
         mask_living = streets['highway'] == 'living_street'
         streets.loc[mask_res, 'sidewalk_width'] = 5
@@ -704,8 +730,8 @@ class DistanceKeepingModel(ap.Model):
 # To perform experiment use commented code:
 
 exp_parameters = {
-    'agents': 1000,
-    'steps': 500,
+    'agents': 10,
+    'steps': 5,
     'viz': False,
     'duration': 5,
     # Including participants walking through forbidden streets as result of random rerouting:
@@ -731,7 +757,8 @@ exp_parameters = {
     # Scenario 1: 'no_compliance' = Agents behave like there are no measures 
     # Scenario 2: 'simple_complicance' = Agents comply with every measure
     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
-    'scenario': ap.Values('no_compliance', 'simple_compliance', 'complex_compliance'),
+    # 'scenario': ap.Values('no_compliance', 'simple_compliance', 'complex_compliance'),
+    'scenario': 'complex_compliance',
     'epoch_time': int(time.time()),
     'origin_destination_pairs': False,
     # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])])
@@ -740,9 +767,9 @@ exp_parameters = {
 sample = ap.Sample(exp_parameters, randomize=False)
 
 # Perform experiment
-exp = ap.Experiment(DistanceKeepingModel, sample, iterations=10, record=True)
-results = exp.run(n_jobs=-1, verbose=10)
-results.save(exp_name='Test_experiment', exp_id=exp_parameters['epoch_time'], path='Experiment', display=True)
+exp = ap.Experiment(DistanceKeepingModel, sample, iterations=1, record=True)
+#results = exp.run(n_jobs=-1, verbose=10)
+#results.save(exp_name='Test_experiment', exp_id=exp_parameters['epoch_time'], path='Experiment', display=True)
 
 #  ------ ANIMATION ------------------------
 anim_parameters = {
@@ -805,7 +832,7 @@ import matplotlib
 matplotlib.rcParams['animation.embed_limit'] = 2**128
 
 # animation_plot(DistanceKeepingModel, anim_parameters)
-print("Done")
+#print("Done")
 # --------------------------------–-----
 
 # ---------------   EXTERNAL PARAMETERS   -----------------–-----
