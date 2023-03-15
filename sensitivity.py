@@ -12,7 +12,7 @@ loop_params = {'agents': 100,
                'steps': 100}
 
 # change these values to execute specific parts of the script
-run = False
+run = True
 # run_with_sobol = False
 calc_contribution = True
 plot = False
@@ -20,11 +20,12 @@ plot = False
 # Loop part (run model with the different inputs and save the output)
 if run:
     # calculate variances with all parameters stochastic
+    abm.exp_parameters['placeholder_destination_test'] = 'all_stochastic'   # just for bugfixing
     abm.exp_parameters['agents'] = loop_params['agents']
     abm.exp_parameters['steps'] = loop_params['steps']
     sample = ap.Sample(abm.exp_parameters, randomize=False)
     exp = ap.Experiment(abm.DistanceKeepingModel, sample, iterations=1, record=True)
-    print("Run with all_stochastic\n \n")
+    print("Run with all_stochastic")
     results = exp.run(n_jobs=-1, verbose=10)
     # converts reporters for the variances into a dictionary
     d = {'var_nod': list(results.reporters['var_nod']),
@@ -34,6 +35,8 @@ if run:
 
     # calculates variances for stochastic parameters
     for param, title in zip(input_parameters, doctitles):
+        # set name for the outputed destinations gpkg-file
+        abm.exp_parameters['placeholder_destination_test'] = title  # just for bugfixing
         # create list of parameters, which will be fixed to their mean
         non_stochastic_parameters = [ele for ele in input_parameters if ele != param]
         default_values = []
@@ -46,7 +49,7 @@ if run:
         # create sample of input parameters for the model, where only one parameter is stochastic
         sample = ap.Sample(abm.exp_parameters, randomize=False)
         exp = ap.Experiment(abm.DistanceKeepingModel, sample, iterations=1, record=True)
-        print(f"Run with {title}\n\n")
+        print(f"Run with {title}")
         results = exp.run(n_jobs=-1, verbose=10)
         # converts reporters for the variances into a dictionary
         d = {'var_nod': list(results.reporters['var_nod']),

@@ -69,18 +69,8 @@ class Pedestrian(ap.Agent):
             # Choose random origin and destination within street network
             self.orig, self.dest = movement.get_random_org_dest(self.model.edges, self.randomDestinationGenerator, 250)
 
-            print(f"Destination of Agent {self.id}: {self.dest['point']}\n")
-            # if self.id == 1:
-            #     print(f"Destination of Agent {self.id}: {self.dest['point']}\n")
-            # if self.id == 3:
-            #     print(f"Destination of Agent {self.id}: {self.dest['point']}\n")
-            # if self.id == 7:
-            #     print(f"Destination of Agent {self.id}: {self.dest['point']}\n")
-            # if self.id == 25:
-            #     print(f"Destination of Agent {self.id}: {self.dest['point']}\n")
-            # if self.id == 89:
-            #     print(f"Destination of Agent {self.id}: {self.dest['point']}\n")
-
+            destination_dict = {'agentID': self.id, 'initial_dest': self.dest['point'],}    # just for bugfixing
+            self.model.destination_list.append(destination_dict)                            # just for bugfixing
             # Get the closest nodes in the network for origin and destination
             self.orig_node_id = self.orig['nearer_node']
             self.dest_node_id = self.dest['nearer_node']
@@ -354,17 +344,9 @@ class Pedestrian(ap.Agent):
                 self.update_model_reporters(nod)
                 # assign new destination to walk towards
                 self.assign_new_destination()
-                print(f"Destination of Agent {self.id} after assigning new destination: {self.dest['point']}\n")
-                # if self.id == 1:
-                #     print(f"Destination of Agent {self.id} after assigning new destination: {self.dest['point']}\n")
-                # if self.id == 3:
-                #     print(f"Destination of Agent {self.id} after assigning new destination: {self.dest['point']}\n")
-                # if self.id == 7:
-                #     print(f"Destination of Agent {self.id} after assigning new destination: {self.dest['point']}\n")
-                # if self.id == 25:
-                #     print(f"Destination of Agent {self.id} after assigning new destination: {self.dest['point']}\n")
-                # if self.id == 89:
-                #     print(f"Destination of Agent {self.id} after assigning new destination: {self.dest['point']}\n")
+                # adds new destination of current agent to the destination_dict of this agent
+                agents_destination_dict = self.model.destination_list[(self.id)-1]  # just for bugfixing
+                agents_destination_dict['new_assigned_dest'] = self.dest['point']   # just for bugfixing
                 self.space.move_to(self, [self.location['geometry'].x - self.model.x_min, self.location['geometry'].y - self.model.y_min])
             else: # will not reach destination in this timestep
                 self.walkAlongStreet(current_directed_edge, self.distance_penult_node_to_dest)
@@ -518,9 +500,9 @@ class DistanceKeepingModel(ap.Model):
         if self.p.viz:
             self.visualize_model()
 
-        
         # Create lists for position and edge data and compliance counter 
         self.position_list = []
+        self.destination_list = []  #just for bugfixing
         self.node_list = []
         self.edge_gdf = []
         self.compliances = 0
@@ -557,7 +539,21 @@ class DistanceKeepingModel(ap.Model):
         self.agents.check_next_node()
         self.agents.get_next_position()
         self.step_counter += 1
-
+        # only evaluated in the last step
+        if self.step_counter == self.p.steps:
+            # eliminate destinations of Agents, that doesn't reach their destinations in the model run
+            for agent in self.agents:
+                would_walk_beyond_next_node = (agent.walking_distance > agent.remaining_dist_on_edge)
+                is_on_last_edge = (len(agent.metric_path) == 2)
+                if is_on_last_edge:
+                    if not would_walk_beyond_next_node:
+                        agents_destination_dict = agent.model.destination_list[(agent.id) - 1]
+                        if 'new_assigned_dest' in agents_destination_dict:
+                            agents_destination_dict.pop('new_assigned_dest')
+                else:
+                    agents_destination_dict = agent.model.destination_list[(agent.id) - 1]
+                    if 'new_assigned_dest' in agents_destination_dict:
+                        agents_destination_dict.pop('new_assigned_dest')
     def update(self):
         # update edge pedestrian counter attributes
         ppl_count = Counter(nx.get_edge_attributes(self.model.G, "ppl_count"))
@@ -619,9 +615,12 @@ class DistanceKeepingModel(ap.Model):
         self.report('mean_comp_prob')
         self.report('std_comp_prob')
         self.report(['non_compliances', 'compliances', 'no_route_changes', 'random_reroutings'])
+        print(f" absolute non-compliance-probabilities: {len(self.non_comp_probs)}")
+        print(f" absolute compliance-probabilities: {len(self.comp_probs)}")
         self.report('SPLs')
         self.report('TPLs')
         self.report('NODs')
+        print(f" absolute NODs: {len(self.NODs)}")
         self.report('non_comp_probs')
         self.report('comp_probs')
         # create output directory
@@ -638,9 +637,35 @@ class DistanceKeepingModel(ap.Model):
         final_edge_gdf = concat(self.edge_gdf, ignore_index=True)        
         final_edge_gdf.to_file('./Experiment/output/%d/edges_%s.gpkg' % (self.model.p.epoch_time, (str(self.model._run_id[0]) + "_" + str(self.model._run_id[1]))), driver='GPKG', layer='Edges_temporal')
         self.nodes.to_file('./Experiment/output/%d/compliance_locations_%s.gpkg' % (self.model.p.epoch_time, (str(self.model._run_id[0]) + "_" + str(self.model._run_id[1]))), driver='GPKG', layer='Compliance Occurences')
+        # output destinations as gpkg
+        all_destinations = DataFrame(self.destination_list)
+        # clears out the column "new_assigned_dest" if there are any new assigned destinations in the destinations Dataframe
+        if 'new_assigned_dest' in all_destinations.columns:
+            initial_destinations = all_destinations.drop(['new_assigned_dest'], axis=1)
+        else:
+            initial_destinations = all_destinations
+        # drop duplicate geometry and build geodataFrame
+        initial_destination_gdf = geopandas.GeoDataFrame(initial_destinations.drop('initial_dest', axis=1),
+                                                         geometry=initial_destinations['initial_dest'],
+                                                         crs="EPSG:3857")
+        initial_destination_gdf.to_file(f'./output/initial_destinations_{self.p.placeholder_destination_test}.gpkg',
+                                        driver='GPKG', layer=f'initial_dest_{self.p.placeholder_destination_test}')
+
+        # clear out NaNs in 'new_assigned_dest' (they come from agents, that dont get a new destination assigned)
+        if 'new_assigned_dest' in all_destinations.columns:
+            new_assigned_dest = all_destinations.dropna(axis=0, how='any', inplace=False)
+            new_assigned_dest = new_assigned_dest.drop('initial_dest', axis=1)
+            new_assigned_dest = new_assigned_dest.reset_index(drop=True)
+            # drop duplicate geometry and build geodataFrame
+            new_assigned_gdf = geopandas.GeoDataFrame(new_assigned_dest.drop('new_assigned_dest', axis=1),
+                                                      geometry=new_assigned_dest['new_assigned_dest'],
+                                                      crs="EPSG:3857")
+            new_assigned_gdf.to_file(f'./output/new_assigned_destinations_{self.p.placeholder_destination_test}.gpkg',
+                                     driver='GPKG', layer=f'new_assigned_dest_{self.p.placeholder_destination_test}')
+
+
         if (self.p.logging):
             print("Compliances: " + str(self.compliances) + "; Non-Compliances: " + str(self.non_compliances))
-        
     def visualize_model(self):
         """Visualizes the model as animation.
             TODO: Update visualization part.
@@ -762,6 +787,7 @@ exp_parameters = {
     'epoch_time': int(time.time()),
     'origin_destination_pairs': False,
     # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])])
+    'placeholder_destination_test': "",
 }
 
 sample = ap.Sample(exp_parameters, randomize=False)
