@@ -1,9 +1,11 @@
 from shapely.geometry import Point, LineString
 from shapely.ops import split, nearest_points, snap
 import numpy as np
+import networkx as nx
 
 
-def generate_random_point_on_line(edges, rng):
+
+def generate_random_point_on_line(graph, edges, rng):
     """Create random origin, destination pair with minimum distance of min_dist between both points.
     
     Parameters
@@ -33,13 +35,13 @@ def generate_random_point_on_line(edges, rng):
 
     # Get nearer and more remote node, and distances to both
     if distance <= rn_edge['mm_len']/2:
-        nearer_node = rn_edge['node_start']
-        remote_node = rn_edge['node_end']
+        nearer_node = find_point_node_at_coord(graph, rn_edge['geometry'].coords[0])
+        remote_node = find_point_node_at_coord(graph, rn_edge['geometry'].coords[-1])
         dist_from_nearest = distance
         dist_from_remote = rn_edge['mm_len'] - distance
     else:
-        nearer_node = rn_edge['node_end']
-        remote_node = rn_edge['node_start']
+        nearer_node = find_point_node_at_coord(graph, rn_edge['geometry'].coords[-1])
+        remote_node = find_point_node_at_coord(graph, rn_edge['geometry'].coords[0])
         dist_from_nearest = rn_edge['mm_len'] - distance
         dist_from_remote = distance
 
@@ -52,7 +54,12 @@ def generate_random_point_on_line(edges, rng):
             'dist_from_remote': dist_from_remote
             }
 
-def get_random_org_dest(edges, rng, min_dist):
+def find_point_node_at_coord(graph, coord):
+    return next((x for x,y in graph.nodes(data=True) if y['pos']==coord), None)
+    # return nodes.loc[nodes['geometry'] == Point(coord)]
+
+
+def get_random_org_dest(graph, edges, rng, min_dist):
     """Create random origin, destination pair with minimum distance of min_dist between both points.
     
     Parameters
@@ -68,10 +75,10 @@ def get_random_org_dest(edges, rng, min_dist):
         Dicts for origin and destination and including nearest node id and id of wider away other node on edge, and distances to both. 
 
     """
-    orig = generate_random_point_on_line(edges, rng)
-    dest = generate_random_point_on_line(edges, rng)
+    orig = generate_random_point_on_line(graph, edges, rng)
+    dest = generate_random_point_on_line(graph, edges, rng)
     while orig['point'].distance(dest['point']) < min_dist:
-        dest = generate_random_point_on_line(edges, rng)
+        dest = generate_random_point_on_line(graph, edges, rng)
     return orig, dest
 
 def get_random_dest(orig, edges, rng, min_dist):
@@ -97,7 +104,7 @@ def get_random_dest(orig, edges, rng, min_dist):
 
 
 
-def get_directed_edge(graph, nodes, start, end):
+def get_directed_edge(graph: nx.Graph, start, end):
     """
         Get edge from graph and check whether the edge starts at current node and ends at next node or the other way around, eventually switch direction and adjust one way attributes. 
         
@@ -112,16 +119,20 @@ def get_directed_edge(graph, nodes, start, end):
             The corrected edge 
     """
     edge = graph.get_edge_data(start, end)
-    if(edge['geometry'].coords[0] != nodes.loc[nodes['nodeID'] == start]['geometry'].values[0].coords[0]):
+    owr = False
+    ow = False
+    if(edge['geometry'].coords[0] != graph.nodes[start]['pos']):
     # invert indice order
-        owr = False
-        ow = False
         if edge['one_way']:
             owr = True
         if edge['one_way_reversed']:
             ow = True
-        edge['one_way'] = ow
-        edge['one_way_reversed'] = owr 
         edge['geometry'] = LineString(list(edge['geometry'].coords)[::-1])
+    else:
+        if edge['one_way']:
+            ow = True
+        if edge['one_way_reversed']:
+            owr = True
+    edge['one_way'] = ow
+    edge['one_way_reversed'] = owr 
     return edge
-
