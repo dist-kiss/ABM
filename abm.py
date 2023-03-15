@@ -70,7 +70,9 @@ class Pedestrian(ap.Agent):
             # Choose random origin and destination within street network
             self.assign_random_od(250)
             #TODO: Place agents in the model at different times            
-        
+            destination_dict = {'agentID': self.id, 'initial_dest': self.dest['point'],}    # just for bugfixing
+            self.model.destination_list.append(destination_dict)                            # just for bugfixing
+
         # Compute shortest path to destination
         self.agent_compute_initial_shortest_path(self.orig_name, self.dest_name)
         # init reporter variables with agent location
@@ -170,6 +172,11 @@ class Pedestrian(ap.Agent):
         # Compute shortest path to destination
         self.agent_compute_initial_shortest_path(self.orig_name, self.dest_name)
         self.init_reporters()
+        
+        # adds new destination of current agent to the destination_dict of this agent
+        agents_destination_dict = self.model.destination_list[(self.id)-1]  # just for bugfixing
+        agents_destination_dict['new_assigned_dest'] = self.dest['point']   # just for bugfixing
+
 
 
     def reset_compliance_status(self):
@@ -456,9 +463,9 @@ class DistanceKeepingModel(ap.Model):
         if self.p.viz:
             self.visualize_model()
 
-        
         # Create lists for position and edge data and compliance counter 
         self.position_list = []
+        self.destination_list = []  #just for bugfixing
         self.node_list = []
         self.edge_gdf = []
         self.compliances = 0
@@ -517,7 +524,21 @@ class DistanceKeepingModel(ap.Model):
         at_final_node.finish_route_and_calc_statistics()
 
         self.step_counter += 1
-
+        # only evaluated in the last step
+        if self.step_counter == self.p.steps:
+            # eliminate destinations of Agents, that doesn't reach their destinations in the model run
+            for agent in self.agents:
+                would_walk_beyond_next_node = (agent.walking_distance > agent.remaining_dist_on_edge)
+                is_on_last_edge = (len(agent.metric_path) == 2)
+                if is_on_last_edge:
+                    if not would_walk_beyond_next_node:
+                        agents_destination_dict = agent.model.destination_list[(agent.id) - 1]
+                        if 'new_assigned_dest' in agents_destination_dict:
+                            agents_destination_dict.pop('new_assigned_dest')
+                else:
+                    agents_destination_dict = agent.model.destination_list[(agent.id) - 1]
+                    if 'new_assigned_dest' in agents_destination_dict:
+                        agents_destination_dict.pop('new_assigned_dest')
     def update(self):
         # update edge pedestrian counter attributes
         ppl_count = Counter(nx.get_edge_attributes(self.model.G, "ppl_count"))
@@ -556,14 +577,17 @@ class DistanceKeepingModel(ap.Model):
     def end(self):
         self.mean_nod = np.mean(self.NODs)
         self.std_nod = np.std(self.NODs)
+        self.var_nod = np.var(self.NODs)
         if self.model.p.scenario == "complex_compliance":
             self.mean_non_comp_prob = np.mean(self.non_comp_probs)
             self.std_non_comp_prob = np.std(self.non_comp_probs)
+            self.var_non_comp_prob = np.var(self.non_comp_probs)
             self.mean_comp_prob = np.mean(self.comp_probs)
             self.std_comp_prob = np.std(self.comp_probs)
         else:
             self.mean_non_comp_prob = None
             self.std_non_comp_prob = None
+            self.var_non_comp_prob = None
             self.mean_comp_prob = None
             self.std_comp_prob = None
 
@@ -571,14 +595,19 @@ class DistanceKeepingModel(ap.Model):
         """ Report an evaluation measure. """
         self.report('mean_nod')
         self.report('std_nod')
+        self.report('var_nod')
         self.report('mean_non_comp_prob')
         self.report('std_non_comp_prob')
+        self.report('var_non_comp_prob')
         self.report('mean_comp_prob')
         self.report('std_comp_prob')
         self.report(['non_compliances', 'compliances', 'no_route_changes', 'random_reroutings'])
+        print(f" absolute non-compliance-probabilities: {len(self.non_comp_probs)}")
+        print(f" absolute compliance-probabilities: {len(self.comp_probs)}")
         self.report('SPLs')
         self.report('TPLs')
         self.report('NODs')
+        print(f" absolute NODs: {len(self.NODs)}")
         self.report('non_comp_probs')
         self.report('comp_probs')
         # create output directory
@@ -593,12 +622,39 @@ class DistanceKeepingModel(ap.Model):
             final_gdf = geopandas.GeoDataFrame(all_positions, geometry=all_positions['geometry'], crs="EPSG:5652")
             final_gdf.to_file('./Experiment/output/%d/positions_%s.gpkg' % (self.p.epoch_time, (str(self._run_id[0]) + "_" + str(self._run_id[1]))), driver='GPKG', layer='Agents_temporal') 
         # output edge data as gpkg
-        final_edge_gdf = pd.concat(self.edge_gdf, ignore_index=True)        
-        final_edge_gdf.to_file('./Experiment/output/%d/edges_%s.gpkg' % (self.p.epoch_time, (str(self._run_id[0]) + "_" + str(self._run_id[1]))), driver='GPKG', layer='Edges_temporal')
-        self.nodes[['degree', 'nodeID', 'geometry', 'compliances','non_compliances', 'random_reroutings', 'no_route_changes']].to_file('./Experiment/output/%d/compliance_locations_%s.gpkg' % (self.p.epoch_time, (str(self._run_id[0]) + "_" + str(self._run_id[1]))), driver='GPKG', layer='Compliance Occurences')
+        if(self.model.p.edges):
+            final_edge_gdf = pd.concat(self.edge_gdf, ignore_index=True)        
+            final_edge_gdf.to_file('./Experiment/output/%d/edges_%s.gpkg' % (self.p.epoch_time, (str(self._run_id[0]) + "_" + str(self._run_id[1]))), driver='GPKG', layer='Edges_temporal')
+            self.nodes[['degree', 'nodeID', 'geometry', 'compliances','non_compliances', 'random_reroutings', 'no_route_changes']].to_file('./Experiment/output/%d/compliance_locations_%s.gpkg' % (self.p.epoch_time, (str(self._run_id[0]) + "_" + str(self._run_id[1]))), driver='GPKG', layer='Compliance Occurences')
+        if(self.model.p.destination_log):
+            all_destinations = pd.DataFrame(self.destination_list)
+            # clears out the column "new_assigned_dest" if there are any new assigned destinations in the destinations Dataframe
+            if 'new_assigned_dest' in all_destinations.columns:
+                initial_destinations = all_destinations.drop(['new_assigned_dest'], axis=1)
+            else:
+                initial_destinations = all_destinations
+            # drop duplicate geometry and build geodataFrame
+            initial_destination_gdf = geopandas.GeoDataFrame(initial_destinations.drop('initial_dest', axis=1),
+                                                            geometry=initial_destinations['initial_dest'],
+                                                            crs="EPSG:5652")
+            initial_destination_gdf.to_file(f'./output/initial_destinations_{self.p.placeholder_destination_test}.gpkg',
+                                            driver='GPKG', layer=f'initial_dest_{self.p.placeholder_destination_test}')
+
+            # clear out NaNs in 'new_assigned_dest' (they come from agents, that dont get a new destination assigned)
+            if 'new_assigned_dest' in all_destinations.columns:
+                new_assigned_dest = all_destinations.dropna(axis=0, how='any', inplace=False)
+                new_assigned_dest = new_assigned_dest.drop('initial_dest', axis=1)
+                new_assigned_dest = new_assigned_dest.reset_index(drop=True)
+                # drop duplicate geometry and build geodataFrame
+                new_assigned_gdf = geopandas.GeoDataFrame(new_assigned_dest.drop('new_assigned_dest', axis=1),
+                                                        geometry=new_assigned_dest['new_assigned_dest'],
+                                                        crs="EPSG:5652")
+                new_assigned_gdf.to_file(f'./output/new_assigned_destinations_{self.p.placeholder_destination_test}.gpkg',
+                                        driver='GPKG', layer=f'new_assigned_dest_{self.p.placeholder_destination_test}')
+
+
         if (self.p.logging):
             print("Compliances: " + str(self.compliances) + "; Non-Compliances: " + str(self.non_compliances))
-        
     def visualize_model(self):
         """Visualizes the model as animation.
             TODO: Update visualization part.
@@ -694,7 +750,36 @@ class DistanceKeepingModel(ap.Model):
 # results = model.run()
 # --------------------------------–-----
 
-
+sa_parameters = {
+    'agents': 20,
+    'steps': 720,
+    'viz': False,
+    'duration': 5,
+    'constant_weight_mean': 0.3424823265591154,
+    'constant_weight_sd': 0.4042530941646003,
+    'rtd_weight_mean': 4.062769564671944, 
+    'rtd_weight_sd': 1.7983272569373019,
+    'ows_weight_mean': -1.686987748677264, 
+    'ows_weight_sd': 0.453969999609177449,
+    'seed': 43,
+    'weight_density': 0,
+    'streets_path': "./input-data/quakenbrueck_street_width.gpkg",
+    'logging': False,
+    'walking_speed_mean': 1.25,
+    'walking_speed_std': 0.21,
+    # Choose value from ['no_interventions', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
+    # Scenario 1: 'no_interventions' = Agents behave like there are no measures 
+    # Scenario 2: 'simple_complicance' = Agents comply with every measure
+    # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
+    'scenario': 'complex_compliance',
+    'epoch_time': int(time.time()),
+    'origin_destination_pairs': False,
+    # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])]),
+    'positions': False,
+    'destination_log': True,
+    'edges' : False,
+    'placeholder_destination_test': "",
+}
 
 # --------------------------------–-----
 # To perform experiment use commented code:
@@ -724,15 +809,18 @@ exp_parameters = {
     'epoch_time': int(time.time()),
     'origin_destination_pairs': False,
     # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])]),
-    'positions': False
+    'positions': False,
+    'destination_log': False,
+    'edges' : False,
+    'placeholder_destination_test': "",
 }
 
 sample = ap.Sample(exp_parameters, randomize=False)
 
 # Perform experiment
-exp = ap.Experiment(DistanceKeepingModel, sample, iterations=10, record=True)
-results = exp.run(n_jobs=-1, verbose=10)
-results.save(exp_name='Test_experiment', exp_id=exp_parameters['epoch_time'], path='Experiment', display=True)
+exp = ap.Experiment(DistanceKeepingModel, sample, iterations=1, record=True)
+#results = exp.run(n_jobs=-1, verbose=10)
+#results.save(exp_name='Test_experiment', exp_id=exp_parameters['epoch_time'], path='Experiment', display=True)
 
 # TO RUN SINGLE MODEL RUN, COMMENT PREVIOUS LINES AND UNCOMMENT NEXT TWO LINES:
 # model = DistanceKeepingModel(exp_parameters)
@@ -765,7 +853,9 @@ anim_parameters = {
     'epoch_time': int(time.time()),
     'origin_destination_pairs': False,
     # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])]),
-    'positions': False
+    'positions': False,
+    'destination_log': False,
+    'edges' : False,
 }
 
 from IPython.display import HTML
