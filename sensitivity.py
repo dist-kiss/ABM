@@ -1,162 +1,75 @@
-import abm
+import distkiss_abm
 import agentpy as ap
-import pandas as pd
-import matplotlib.pyplot as plt
-import numpy as np
+import time
+import sensitivity_plots as splot
 
-# input part (change parameters of the model)
-input_parameters = ['walking_speed_std', 'constant_weight_sd', 'rtd_weight_sd', 'ows_weight_sd']
-doctitles = ["walking_speed_stochastic", "constant_weight_stochastic", "rtd_weight_stochastic", "ows_weight_stochastic"]
+# Model parameters for sensitivity analysis (SA)
+sa_parameters = {
+    # TODO: Think about varying the number of agents (decrease or increase?)
+    'agents': 100, # number of agents 
+    'steps': 2000, # number of timesteps (model stops if all agents reached their destination before the amount of steps is reached) 
+    'duration': 5,
+    'streets_path': "./input-data/quakenbrueck_street_width.gpkg",
+    # For SA set SD values to 0 and only vary mean value -> all agents within one model run will get the same parameters
+    # Range (mean-SD, mean+SD) is used here. TODO: Vary range. E.g. use (mean*0.5, mean*2) or similar 
+    'constant_weight_mean': ap.Range(0.3424823265591154-0.4042530941646003, 0.3424823265591154+0.4042530941646003),
+    'constant_weight_sd': 0,
+    'rtd_weight_mean': ap.Range(4.062769564671944-1.7983272569373019, 4.062769564671944+1.7983272569373019), 
+    'rtd_weight_sd': 0,
+    'ows_weight_mean': ap.Range(-1.686987748677264-0.453969999609177449, -1.686987748677264+0.453969999609177449), 
+    'ows_weight_sd': 0,
+    # TODO: IF OUTPUT METRICS STAY AS THEY ARE (non_comp_prob and nod) WALKING SPEED DOES NOT NEED TO BE CONSIDERED IN SA!
+    'walking_speed_mean': ap.Range(1.25-0.21, 1.25+0.21),
+    'walking_speed_std': 0,
+    # Density not used as weight so far.
+    'weight_density': 0,
+    'seed': 43,
+    'scenario': 'complex_compliance',
+    # Choose when to record non compliance probability (basically choose definition of non compliance); Default is True:
+    # False = Non compliance is only where agent initially wanted to walk into forbidden one way street
+    # True = Additionally in situations, in which agent keeps its route doing a second evalutation after initally 
+    #       wanting to (randomly) reroute into ows.
+    'record_second_opinion_ncps': True,
+    # Whether agents can reroute from inital path, by default True. Only turn of if agents shall be restricted to inital path!
+    'rerouting_allowed': True,
+    # TODO: Decide whether to run the model with agents getting new destinations assigned after having reached their destination.
+    # False -> No new agent generation | True -> New agent generation
+    'assign_new_destinations': False,
+    # Whether only new destinations shall be assigned and previous destination is used as origin
+    'reuse_previous_dest_as_orig': False,
+    'epoch_time': int(time.time()),
+    'origin_destination_pairs': False,
+    # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])]),
+    # Whether positions, edges and destination should be saved as gpkg files:
+    'positions': False,
+    'edges' : False,
+    'destination_log': False,
+    'compliance_nodes': False,
+    'max_densities': False,
+    # Add logs for debugging
+    'logging': False,
+}
 
-loop_params = {'agents': 100,
-               'steps': 100}
+# Create Saltelli samples
+# TODO: Increase number of samples.
+sample = ap.Sample(
+    sa_parameters,
+    n=8,
+    method='saltelli',
+    calc_second_order=True
+)
+# Run experiment.
+# TODO: Vary number of iterations (most likely increase)
+sa_exp = ap.Experiment(distkiss_abm.DistanceKeepingModel, sample, iterations=30, record=False)
+results = sa_exp.run(n_jobs=-1, verbose=10)
+# Save results to "./sensitivity_data/SA_Exp_Saltelli_01" (change exp_id for multiple runs)
+results.save(exp_name='SA_Exp_Saltelli', exp_id="01", path='sensitivity_data', display=True)
+# Plot histograms of reporters.
+results.reporters.hist()
 
-# change these values to execute specific parts of the script
-run = True
-# run_with_sobol = False
-calc_contribution = True
-plot = False
+# Calulcate sobol statistics on a given set of output metrics (mean_non_comp_prob and var_non_comp_prob)
+# TODO: Add other output metrics such as NOD etc.
+sob_results = results.calc_sobol(reporters=['mean_non_comp_prob', 'var_non_comp_prob'])
 
-# Loop part (run model with the different inputs and save the output)
-if run:
-    # calculate variances with all parameters stochastic
-    abm.exp_parameters['placeholder_destination_test'] = 'all_stochastic'   # just for bugfixing
-    abm.exp_parameters['agents'] = loop_params['agents']
-    abm.exp_parameters['steps'] = loop_params['steps']
-    sample = ap.Sample(abm.exp_parameters, randomize=False)
-    exp = ap.Experiment(abm.DistanceKeepingModel, sample, iterations=1, record=True)
-    print("Run with all_stochastic")
-    results = exp.run(n_jobs=-1, verbose=10)
-    # converts reporters for the variances into a dictionary
-    d = {'var_nod': list(results.reporters['var_nod']),
-         'var_non_comp_prob': list(results.reporters['var_non_comp_prob'])}
-    df = pd.DataFrame(data=d, index=['all_stochastic'])
-    df.to_csv(f"./sensitivity_data/variances_all_stochastic.csv", index=True)
-
-    # calculates variances for stochastic parameters
-    for param, title in zip(input_parameters, doctitles):
-        # set name for the outputed destinations gpkg-file
-        abm.exp_parameters['placeholder_destination_test'] = title  # just for bugfixing
-        # create list of parameters, which will be fixed to their mean
-        non_stochastic_parameters = [ele for ele in input_parameters if ele != param]
-        default_values = []
-        for p in non_stochastic_parameters:
-            # save old parameter value
-            default_values.append(abm.exp_parameters[p])
-            # fix choosen parameter distribution to its mean (by setting the sd of the normal distribution to 0)
-            abm.exp_parameters[p] = 0
-
-        # create sample of input parameters for the model, where only one parameter is stochastic
-        sample = ap.Sample(abm.exp_parameters, randomize=False)
-        exp = ap.Experiment(abm.DistanceKeepingModel, sample, iterations=1, record=True)
-        print(f"Run with {title}")
-        results = exp.run(n_jobs=-1, verbose=10)
-        # converts reporters for the variances into a dictionary
-        d = {'var_nod': list(results.reporters['var_nod']),
-             'var_non_comp_prob': list(results.reporters['var_non_comp_prob'])}
-        df = pd.DataFrame(data=d, index=[title])
-        df.to_csv(f"./sensitivity_data/variances_{title}.csv", index=True)
-
-        # reset fixed parameters to their old values
-        for val, p in zip(default_values, non_stochastic_parameters):
-            abm.exp_parameters[p] = val
-
-# if run_with_sobol:
-#     # calculate sobol indices with all parameters stochastic
-#     abm.exp_parameters['agents'] = loop_params['agents']
-#     abm.exp_parameters['steps'] = loop_params['steps']
-#
-#     problem = {
-#         'num_vars': 4,
-#         'names': ['walking_speed', 'constant_weight', 'rtd_weight', 'ows_weight'],
-#         'bounds': [[abm.exp_parameters['walking_speed_mean'], abm.exp_parameters['walking_speed_std']],
-#                    [abm.exp_parameters['constant_weight_mean'], abm.exp_parameters['constant_weight_sd']],
-#                    [abm.exp_parameters['rtd_weight_mean'], abm.exp_parameters['rtd_weight_sd']],
-#                    [abm.exp_parameters['ows_weight_mean'], abm.exp_parameters['ows_weight_sd']]
-#                    ],
-#         'dists': ['norm', 'norm', 'norm', 'norm']
-#     }
-#
-#     sample = ap.Sample(problem, n=2, method='saltelli', randomize=False)
-#     exp = ap.Experiment(abm.DistanceKeepingModel, sample, iterations=1, record=True)
-#     results = exp.run(n_jobs=-1, verbose=10)
-#     Si = results.calc_sobol(['var_nod', 'var_non_comp_prob'])
-#     print(Si)
-
-if calc_contribution:
-    # load variance data saved from an experiment
-    variances = pd.concat(map(pd.read_csv, ['./sensitivity_data/variances_all_stochastic.csv',
-                                            './sensitivity_data/variances_walking_speed_stochastic.csv',
-                                            './sensitivity_data/variances_constant_weight_stochastic.csv',
-                                            './sensitivity_data/variances_rtd_weight_stochastic.csv',
-                                            './sensitivity_data/variances_ows_weight_stochastic.csv']),
-                                            ignore_index=True)
-
-    # calculate contribution of the parameters to the model variances
-    print(variances)
-    indexes = list(variances.index)
-
-    # indexes of "variances"-DataFrame
-    # 0 = all_stochastic
-    # 1 = walking_speed_stochastic
-    # 2 = constant_weight_stochastic
-    # 3 = rtd_weight_stochastic
-    # 4 = ows_weight_stochastic
-
-    # calculate parameter contribution to var_nod
-    contributions_to_var_nod = []
-
-    for idx in indexes[1:]:
-        res = variances.loc[idx, "var_nod"] / variances.loc[0, "var_nod"]
-        contributions_to_var_nod.append(res * 100)  # mult by 100 to get "%"
-
-    # calculate parameter contribution to var_non_comp_prob
-    contributions_to_var_non_comp_prob = []
-
-    for idx in indexes[1:]:
-        res = variances.loc[idx, "var_non_comp_prob"] / variances.loc[0, "var_non_comp_prob"]
-        contributions_to_var_non_comp_prob.append(res * 100)  # mult by 100 to get "%"
-
-    print(f"Contribution to var_nod: {contributions_to_var_nod}")
-    print(f"Contribution to var_non_comp_prob: {contributions_to_var_non_comp_prob}")
-
-    controlsum_var_nod = sum(contributions_to_var_nod)
-    controlsum_non_comp_prob = sum(contributions_to_var_non_comp_prob)
-
-    print(f"Sum of contributions_to_var_nod: {controlsum_var_nod}%")
-    print(f"Sum of contributions_to_var_non_comp_prob: {controlsum_non_comp_prob}%")
-
-
-def plot_barchart():
-    # Labels for the bars
-    model_outputs = ('var_nod', 'var_non_comp_prob')
-
-    # Dictionary with values of the contribution to the variances. Also used for labeling the bars in the plot
-    percentages = {
-        'walking_speed': [contributions_to_var_nod[0], contributions_to_var_non_comp_prob[0]],
-        'constant_weight': [contributions_to_var_nod[1], contributions_to_var_non_comp_prob[1]],
-        'rtd_weight': [contributions_to_var_nod[2], contributions_to_var_non_comp_prob[2]],
-        'ows_weight': [contributions_to_var_nod[3], contributions_to_var_non_comp_prob[3]]
-    }
-
-    fig, ax = plt.subplots()
-    # create array of 0 to store the different layers in the bars
-    bottom = np.zeros(2)
-
-    # loop through all Label+Percentage-Tuples to create the bars for the plot
-    for label, percentage in percentages.items():
-        ax.bar(model_outputs, percentage, width=0.5, label=label, bottom=bottom)
-        # base values to put the next "Layer" of values ontop
-        bottom += percentage
-
-    ax.set_title("Sensitivity Analysis")
-    ax.set_ylabel('contribution to total variance [in %]')
-    plt.tight_layout(rect=[0, 0, 0.75, 1])
-    # create right-aligned legend
-    ax.legend(title='input parameters', bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
-
-    plt.show()
-
-
-if plot:
-    plot_barchart()
+# Plot sensitivty results as barchart.
+splot.plot_sobol(sob_results)

@@ -7,20 +7,15 @@ import pandas as pd
 import momepy
 import datetime
 from collections import Counter
-import movement
-import graph_helpers as gh
 import math
-import os
 import numpy as np
 from pathlib import Path
-import time    
 from shapely.ops import substring, Point, LineString
 
-# Visualization
-import matplotlib.pyplot as plt 
-
-# TODO: 
-# - sensitivity analysis -> parameters vs. relative detour | mean & sd compliance rates
+# Custom libs
+import movement
+import graph_helpers as gh
+import spatial_output_creator as soc
 
 class Pedestrian(ap.Agent):
 
@@ -28,51 +23,63 @@ class Pedestrian(ap.Agent):
         """Initializes an agent of type pedestrian with its attributes
         """
 
-        # Init random number generator for each agent using seed; for reproducibility
+        """ Initialize random number generators. """
+        # Use seeds produced by model random generator (using model seed) for reproducibilty.
+        # Generate seeds for: generic random numbers, random weights, random destinations (and origins)
         seed = self.model.random.getrandbits(128)
+        weightSeed = self.model.random.getrandbits(128)
         destinationSeed = self.model.random.getrandbits(128)
+        # Init three separate random number generator for each agent using seeds for reproducibility
         self.rng = random.Random(seed)
+        self.randomWeightsGenerator = random.Random(weightSeed)
         self.randomDestinationGenerator = np.random.default_rng(destinationSeed)
         
-        # Initialize attributes
+        """ Initialize agent weights and derived attributes. """
+        # Weights:
+        self.constant_weight = self.randomWeightsGenerator.gauss(self.model.p.constant_weight_mean, self.model.p.constant_weight_sd)
+        self.rtd_weight = self.randomWeightsGenerator.gauss(self.model.p.rtd_weight_mean, self.model.p.rtd_weight_sd)
+        self.ows_weight = self.randomWeightsGenerator.gauss(self.model.p.ows_weight_mean, self.model.p.ows_weight_sd)
         # walking speed is based on average walking speed and its standard deviation
         # Source: Satish Chandra and Anish Khumar Bharti 2013, p. 662, "Speed Distribution Curves for Pedestrians during Walking and Crossing"
-        self.walking_speed = self.rng.gauss(self.model.p.walking_speed_mean, self.model.p.walking_speed_std)
+        self.walking_speed = self.randomWeightsGenerator.gauss(self.model.p.walking_speed_mean, self.model.p.walking_speed_std)
+        # Derived attributes:
         self.walking_distance = self.walking_speed * self.model.p.duration
 
-         # Choose agent weights
-        self.constant_weight = self.rng.gauss(self.model.p.constant_weight_mean, self.model.p.constant_weight_sd)
-        self.rtd_weight = self.rng.gauss(self.model.p.rtd_weight_mean, self.model.p.rtd_weight_sd)
-        self.ows_weight = self.rng.gauss(self.model.p.ows_weight_mean, self.model.p.ows_weight_sd)
-
-        # Initialize variables 
+        """ Initialize other attributes. """
+        # Graph representations
         self.global_graph = self.model.G
         self.personal_network = self.model.G.to_undirected()
-        self.num_detours = 0
+        # Route specific
         self.metric_path = []
+        self.init_shortest_path_length = 0
+        self.num_detours = 0
         self.remaining_dist_on_edge = 0
         self.len_traversed = 0
         self.route_counter = 0
-        self.init_shortest_path_length = 0
+        self.finished = False
+        self.total_detour = 0
+        self.final_path = []
+        # Reporter attributes
         self.non_comp_probs = []
         self.comp_probs = []
         self.compliance_nodes = []
         self.non_compliance_nodes = []
         self.random_rerouting_nodes = []
         self.no_route_change_nodes = []
-        self.total_detour = 0
-        self.final_path = []
 
+        """ Assign origin and destination. """
         if(self.model.p.origin_destination_pairs):
             # Choose origin and destination pair from model parameters
             self.assign_od_node_pair(self.model.p.origin_destination_pairs)
         else:
             # Choose random origin and destination within street network
-            self.assign_random_od(250)
-            #TODO: Place agents in the model at different times            
-            destination_dict = {'agentID': self.id, 'initial_dest': self.dest['point'],}    # just for bugfixing
-            self.model.destination_list.append(destination_dict)                            # just for bugfixing
+            self.assign_random_od(250, False)
+            
+            # for debugging:
+            if(self.model.p.destination_log):
+                self.destination_dict = {'agentID': self.id, 'initial_dest': self.dest['point'],}
 
+        """ Compute initial path and set reporter attributes. """
         # Compute shortest path to destination
         self.agent_compute_initial_shortest_path(self.orig_name, self.dest_name)
         # init reporter variables with agent location
@@ -89,20 +96,31 @@ class Pedestrian(ap.Agent):
         self.orig_name = od_pairs[i][0]
         self.dest_name = od_pairs[i][1]
         
-    def assign_random_od(self, min_dist):
+    def assign_random_od(self, min_dist, keep_prev_dest_as_orig):
         """Assigns a random origin-destination pair within the street network, with a given minimum distance bewteen both points.
             
             Args:
                 min_dist (float): minimum distance between origin and destination
-        """                
-        self.orig, self.dest = movement.get_random_org_dest(self.personal_network, self.model.edges, self.randomDestinationGenerator, min_dist)
+                keep_prev_dest_as_orig (boolean): whether to keep the destination of the previous 
+                    route as origin for the following route or to create new origin
+        """
+        if(keep_prev_dest_as_orig):
+            # reuse previous destination as origin and only generate new destination
+            self.orig = self.dest.copy()
+            self.dest = movement.get_random_dest(self.personal_network, self.orig, self.model.edges, self.randomDestinationGenerator, min_dist)
+        else:
+            # generate new origin and destination
+            self.orig, self.dest = movement.get_random_org_dest(self.personal_network, self.model.edges, self.randomDestinationGenerator, min_dist)
+        # create intermediate nodes in personal graph at origin and destination location
+        # Use the following name scheme: A{ID of Agent}S{Route Counter}, e.g. A1S1 for the origin of the first route of agent 1. 
         self.orig_name = "A"+str(self.id)+"S"+str(self.route_counter)
+        # Use the following name scheme: A{ID of Agent}D{Route Counter}, e.g. A1D1 for the destination of the first route of agent 1. 
         self.dest_name = "A"+str(self.id)+"D"+str(self.route_counter)
+        # Add intermediate nodes to personal graph
         gh.add_temporary_node(self.personal_network, self.orig['nearer_node'], self.orig['remote_node'], 
             self.orig['dist_from_nearer'], self.orig_name, self.orig['point'].x,self.orig['point'].y)
         gh.add_temporary_node(self.personal_network, self.dest['nearer_node'], self.dest['remote_node'], 
             self.dest['dist_from_nearer'], self.dest_name, self.dest['point'].x,self.dest['point'].y)
-
 
     def agent_compute_initial_shortest_path(self, orig, dest):
         """Calculate the shortest path from the agents current location to its destination and the length of the path.
@@ -114,21 +132,22 @@ class Pedestrian(ap.Agent):
         """
         self.metric_path = nx.dijkstra_path(self.personal_network, source=orig, target=dest, weight='mm_len')
         self.metric_path_length = nx.path_weight(self.personal_network, self.metric_path, weight='mm_len')
+        # store length of shortest path in agent attributes
         self.init_shortest_path_length = self.metric_path_length
 
     def init_reporters(self):
         """Calculates the first position of an agent and creates a location dict to store location information of the agent. 
             Also sets further attributes, such as edge counter attributes and the remaining distance to the next node. 
         """        
-        # Update people counter of current edge
-        # graph_edge = self.network[self.metric_path[0]][self.metric_path[1]]
+        # Update people counter of edge the agent is currently on by one
         self.graph_edge = self.global_graph[self.orig['nearer_node']][self.orig['remote_node']]
         gh.increase_edge_counter(self.graph_edge, 1)
         self.previous_edge = self.personal_network[self.orig['nearer_node']][self.orig['remote_node']]
+
         # Get the edge the agent starts on (corrected direction)
         self.current_edge = movement.get_directed_edge(self.personal_network, self.metric_path[0], self.metric_path[1])
         
-        # Set distance to next node
+        # Set distance to next intersection (graph node)
         self.remaining_dist_on_edge = self.current_edge['mm_len']
         
         # Create dict for agent location and related attributes
@@ -142,42 +161,38 @@ class Pedestrian(ap.Agent):
             'no_route_change': False,
             'random_rerouting': False
         }
+        # if random origin is used instead of predefined od-pairs, remove intermediate node from graph
+        # shall avoid that the agent uses it in rerouting and reduce computation time
         if(not self.model.p.origin_destination_pairs):
             self.personal_network.remove_node(self.orig_name)
 
 
     def setup_pos(self, space):
-            self.space = space
-            self.neighbors = space.neighbors
-            self.pos = space.positions[self]
+        """Store the poistion of the agent in the AgentPy-specific space. Used for animation only. 
+        """
+        self.space = space
+        self.neighbors = space.neighbors
+        self.pos = space.positions[self]
 
     def assign_new_destination(self):
-        """Assigns a new origin and destination to the agent. 
-           Then calculates shortest path between these and assigns path to the agent. 
+        """Assigns a new origin and destination to the agent. Conceptually this is equivalent to "spawning" a new agent, 
+            but reuses the instance of an agent that has arrived at it's destination. 
+           Then calculates shortest path between origin and destination and assigns path to the agent.
         """
-        # increase route counter
+        # increase route counter to keep track of the number of routes of the agent instance
         self.route_counter += 1
 
         if(self.model.p.origin_destination_pairs): 
             # Generate new origin and destination pair from model parameter origin_destination_pairs
             self.assign_od_node_pair(self.model.p.origin_destination_pairs)
         else:
-            # UNCOMMENT if you want to assign new destination only:
-            # self.orig = self.dest.copy()
-            # self.dest = movement.get_random_dest(self.orig, self.model.edges, self.randomDestinationGenerator, 250)
+            # Generate new origin (only if reuse_previous_dest_as_orig is False) and destination:
+            self.assign_random_od(250, self.model.p.reuse_previous_dest_as_orig)
 
-            # Generate new origin and destination:
-            self.assign_random_od(250)
-
-        # Compute shortest path to destination
+        # Compute shortest path to destination and initalise reporter variables
         self.agent_compute_initial_shortest_path(self.orig_name, self.dest_name)
         self.init_reporters()
         
-        # adds new destination of current agent to the destination_dict of this agent
-        agents_destination_dict = self.model.destination_list[(self.id)-1]  # just for bugfixing
-        agents_destination_dict['new_assigned_dest'] = self.dest['point']   # just for bugfixing
-
-
 
     def reset_compliance_status(self):
         """Resets location compliance values.
@@ -190,16 +205,14 @@ class Pedestrian(ap.Agent):
     def update_model_reporters(self, nod):
         """Update model reporters and reset agent variables.
         """
-        # add total path length (TPL), shortest path length (SPL) 
-        # and normalized observed detour (NOD)
+        # add total path length (TPL), shortest path length (SPL) and normalized observed detour (NOD)
         self.model.TPLs.append(self.len_traversed)
         self.model.SPLs.append(self.init_shortest_path_length)
         self.model.NODs.append(nod)
         # add non-compliance and compliance probablities of current route
         self.model.non_comp_probs.extend(self.non_comp_probs)
         self.model.comp_probs.extend(self.comp_probs)
-        # add counter numbers of several types of rerouting events of current route
-        # to global model counters
+        # add counter numbers of several types of rerouting events of current route to global model counters
         self.model.compliances += len(self.compliance_nodes)
         self.model.non_compliances += len(self.non_compliance_nodes)
         self.model.random_reroutings += len(self.random_rerouting_nodes)
@@ -213,7 +226,7 @@ class Pedestrian(ap.Agent):
             self.model.nodes.at[node, 'random_reroutings'] +=1
         for node in self.no_route_change_nodes:
             self.model.nodes.at[node, 'no_route_changes'] +=1
-        # reset values of variables
+        # reset values of agent variables
         self.non_comp_probs = []
         self.comp_probs = []
         self.compliance_nodes = []
@@ -223,20 +236,26 @@ class Pedestrian(ap.Agent):
         self.len_traversed = 0
         self.total_detour = 0
         self.final_path = []
-
                         
     def stop_walking_at_node(self):
         """Simulate agent walking until the next node. Update path and agent attributes. 
         """
-        gh.decrease_edge_counter(self.graph_edge, 1)
-        next_location = Point(self.personal_network.nodes[self.metric_path[1]]['pos'])
-        # increase length traversed by the remaining distance to next node
+        # increase length traversed by the remaining distance to next intersection
         self.len_traversed += self.remaining_dist_on_edge
+        # Get location of next intersection
+        next_location = Point(self.personal_network.nodes[self.metric_path[1]]['pos'])
+        # Reduce people counter of current edge by 1
+        gh.decrease_edge_counter(self.graph_edge, 1)
+
         # erase first node from current path list 
         prev = self.metric_path.pop(0)
+        # add that node to the final chosen path
         self.final_path.append(prev)
-        if(prev in self.personal_network.nodes):       
+        if(prev in self.personal_network.nodes):    
+            # this cannot be done for the origin node, as it was removed by this time already, 
+            # but previous edge was alread set during initalization (see function init_reporters()) in that case
             self.previous_edge = self.personal_network[prev][self.metric_path[0]]  
+
         # update remaining path length
         self.metric_path_length = self.metric_path_length - self.remaining_dist_on_edge 
         # reset remaining distance
@@ -262,6 +281,9 @@ class Pedestrian(ap.Agent):
         self.space.move_to(self, [self.location['geometry'].x - self.model.x_min, self.location['geometry'].y - self.model.y_min])
     
     def walk(self):
+        """Check whether agent reaches next intersection within this timestep and walk until 
+            intersection or until timestep is over.
+        """
         would_walk_beyond_next_node = (self.walking_distance > self.remaining_dist_on_edge)
         if would_walk_beyond_next_node:
             self.stop_walking_at_node()
@@ -269,15 +291,27 @@ class Pedestrian(ap.Agent):
             self.stop_walking_after_timestep()
 
     def finish_route_and_calc_statistics(self):
-        """Calculate final metrics of path and update model reporters. Eventually trigger new origin destination assignement.
+        """Calculate final metrics of path and update model reporters. Depending on model parameters, 
+            optionally trigger new origin/destination assignment.
         """
         nod = (self.total_detour / self.init_shortest_path_length)
         self.update_model_reporters(nod)
+        # if there is an intermediate destination node, remove it from the agent's personal network
         if(not self.model.p.origin_destination_pairs):
             self.personal_network.remove_node(self.dest_name)
-        # assign new destination to walk towards
-        self.assign_new_destination()
-        self.space.move_to(self, [self.location['geometry'].x - self.model.x_min, self.location['geometry'].y - self.model.y_min])
+        
+        # for debugging:
+        if(self.model.p.destination_log and self.route_counter > 0):
+            self.destination_dict['new_assigned_dest'] = self.dest['point']
+
+        # check if new agents shall be appear in the model after an agent reached its destination
+        if(self.model.p.assign_new_destinations):
+            # assign new destination to walk towards
+            self.assign_new_destination()
+            self.space.move_to(self, [self.location['geometry'].x - self.model.x_min, self.location['geometry'].y - self.model.y_min])
+        else:
+            # mark agent as finished and let it stay at its location
+            self.finished = True
 
 
     def evaluate_and_choose_path(self):
@@ -305,7 +339,7 @@ class Pedestrian(ap.Agent):
             alt_path, detour = gh.get_alternative_path(self.personal_network, self.metric_path, self.metric_path_length, self.previous_edge, one_way_street, self.id)
 
             # evaluate whether to reroute or not
-            deviate_from_path = self.rerouting_decision(detour, next_edge, one_way_street)
+            deviate_from_path = self.rerouting_decision(detour, next_edge, one_way_street, True)
 
             # if alternative route is forbidden, re-evaluate decision to reroute
             alt_next_edge = movement.get_directed_edge(self.global_graph, alt_path[0],alt_path[1])
@@ -314,7 +348,7 @@ class Pedestrian(ap.Agent):
                 if(self.model.p.scenario == 'simple_compliance'):
                     deviate_from_path = False
                 else:
-                    deviate_from_path = not(self.rerouting_decision(-detour, alt_next_edge, 1))
+                    deviate_from_path = not(self.rerouting_decision(-detour, alt_next_edge, 1, self.model.p.record_second_opinion_ncps))
 
             if(deviate_from_path):
                 # deviation + inital was one_way_street = compliance
@@ -331,10 +365,11 @@ class Pedestrian(ap.Agent):
                     self.non_compliance_nodes.append(self.metric_path[0])
 
                 # replace initial path by alternative one
-                self.metric_path = alt_path
-                self.metric_path_length += detour
-                self.total_detour += detour
-                self.num_detours += 1
+                if(self.model.p.rerouting_allowed):
+                    self.metric_path = alt_path
+                    self.metric_path_length += detour
+                    self.total_detour += detour
+                    self.num_detours += 1
 
             # no deviation + one way street = non compliance
             elif(one_way_street):
@@ -346,7 +381,7 @@ class Pedestrian(ap.Agent):
                 self.no_route_change_nodes.append(self.metric_path[0])
 
 
-    def rerouting_decision(self, detour, edge, ows):
+    def rerouting_decision(self, detour, edge, ows, record_non_comp_prob):
         """Evalutes whether agent reroutes or continues on its intended path based on one way street interventions and the detour of the alternative path 
             Decision is returned as boolean.
             Formula F(x1,...,xn) for the chance to comply is:
@@ -356,6 +391,7 @@ class Pedestrian(ap.Agent):
             detour (float): The detour length the alternative option would result in 
             edge (_type_): The edge belonging to the next intended street
             ows (int): Presence of one way street on the next intended street (1 = ows, 0 = no ows)
+            record_non_comp_prob (boolean): Whether to record non compliance probability (depends on definition of the term)
 
         Returns:
             Boolean: True if the agent reroutes, False if it stays on its intended route
@@ -370,7 +406,7 @@ class Pedestrian(ap.Agent):
             # compute probability to stay on path (if ows, this equals non-compliance probability)
             prop_no_deviation = 1 / (1 + math.exp(-z))
             
-            if(ows):
+            if(ows and record_non_comp_prob):
                 # record compliance and non_compliance probabilities for model output
                 self.non_comp_probs.append(prop_no_deviation)
                 self.comp_probs.append(1 - prop_no_deviation)
@@ -385,54 +421,7 @@ class Pedestrian(ap.Agent):
                     print("Non-Compliance, " + str(self.id))
                 return False 
 
-
-    # def get_alternative_path(self, path, metric_path_length, ows):
-    #     """Returns an alternative path from the model graph to the agents destination, which does not use the first edge of the current path.
-    #         If first edge of the current path has one way street reversed intervention, than iteratively call this function until alternative path is not
-    #         or until there is no alternative path left. In that case, return inital path.
-        
-    #     Args:
-    #         path (list): Given path to find alternative to 
-    #         metric_path_length (float): Length of the inital path 
-
-    #     Returns:
-    #         list, float, float: The alternative path, its length and distance between penultimate node and exact destination
-    #     """
-    #     # create variables for current node, the next node and the last node (destination) on the current path
-    #     current_node = path[0]
-    #     next_node = path[1]
-        
-    #     # filter out next edge on path
-    #     self.personal_network[current_node][next_node]["walkable"] = False
-    #     # and if next street is not a ows, filter previous edge (forbids turning around!)
-    #     if(not ows):
-    #         self.previous_edge['walkable'] = False
-    #     def filter_edge(n1, n2):
-    #         return self.personal_network[n1][n2].get("walkable", True)
-    #     view = nx.subgraph_view(self.personal_network, filter_edge=filter_edge)
-
-    #     try:
-    #         # compute alternative path and its length on subview
-    #         alt_path = nx.dijkstra_path(view, source=current_node, target=self.dest_name, weight='mm_len')
-    #         alt_length = nx.path_weight(view, alt_path, weight='mm_len')
-    #         # reset walkability attribute of graph
-    #         self.personal_network[current_node][next_node]["walkable"] = True
-    #         self.previous_edge['walkable'] = True
-    #         if(self.model.p.logging):
-    #             # if logging: print alternative and current path lengths
-    #             print('alt: '+ str(alt_length) + ' orig: ' + str(metric_path_length))
-    #         return alt_path, alt_length - metric_path_length
-        
-    #     # if there is no alternative path return inital path
-    #     except (nx.NetworkXNoPath) as e:
-    #         print("No alternative for agent " + str(self.id) + ' at node ' + str(self.location['latest_node'])+ '.')
-    #         # reset walkability attribute of graph 
-    #         self.personal_network[current_node][next_node]["walkable"] = True
-    #         self.previous_edge['walkable'] = True
-    #         return path, 0
-        
-
-# ---- UPDATE FUNCTIONS ---- 
+# ---- UPDATER FUNCTIONS ---- 
     def update_graph_edge_to_next(self):
         """ Update the agents graph edge to edge between first two nodes of its path.
         """
@@ -443,13 +432,13 @@ class Pedestrian(ap.Agent):
         """ Update the agents graph edge to edge of the destination location
         """
         self.graph_edge = self.global_graph[self.dest['nearer_node']][self.dest['remote_node']]
-        # self.set_graph_edge(self.dest['nearer_node'], self.dest['remote_node'])
 
     def update_edge_attributes(self):
+        """ Update the agents current edge to next edge on path, set remaining distance on edge
+            to edge distance and update edge counter.
+        """
         self.current_edge = movement.get_directed_edge(self.personal_network, self.metric_path[0], self.metric_path[1])
-        # self.set_local_graph_edge(self.metric_path[0], self.metric_path[1])
         self.remaining_dist_on_edge = self.current_edge['mm_len']
-        # self.set_remaining_dist_on_edge(self.current_edge['mm_len'])
         gh.increase_edge_counter(self.graph_edge, 1)
 
 
@@ -457,15 +446,14 @@ class Pedestrian(ap.Agent):
 class DistanceKeepingModel(ap.Model):
 
     def setup(self):
+        """Setup the model. """
+
+        """Create the graph using the street input file. """  
         self.create_graph(streets_gpkg=self.p.streets_path)
         
-        # opt. visualize network nodes, edges and degree values
-        if self.p.viz:
-            self.visualize_model()
-
+        """Initialize model variables. """  
         # Create lists for position and edge data and compliance counter 
         self.position_list = []
-        self.destination_list = []  #just for bugfixing
         self.node_list = []
         self.edge_gdf = []
         self.compliances = 0
@@ -479,10 +467,16 @@ class DistanceKeepingModel(ap.Model):
         self.SPLs = []
         # Total path lengths
         self.TPLs = []
+        # non compliance probabilities and compliance probabilities 
         self.non_comp_probs = []
         self.comp_probs = []
+        # for debugging:
+        if(self.p.destination_log):
+            self.destination_list = []
 
-        # Animation variables
+        """Set animation variables. """ 
+        # Variables for animation (fixed to the current input file)
+        # TODO: Make generic by using input file to infer variables
         self.x_max = 32429731.2
         self.y_max = 5837205.5
         self.x_min = 32428935.9
@@ -490,7 +484,7 @@ class DistanceKeepingModel(ap.Model):
         self.width = math.ceil(self.x_max - self.x_min)
         self.height = math.ceil(self.y_max - self.y_min)
 
-        # Create a list of agents 
+        """Create a list of agents. """ 
         self.agents = ap.AgentList(self, self.p.agents, Pedestrian)
 
         self.space = ap.Space(self, shape=[self.width, self.height])
@@ -501,11 +495,15 @@ class DistanceKeepingModel(ap.Model):
     def step(self):
         """Call a method for every agent. 
         """
+        
+        """ Select different groups of agents. """ 
         # Select agents that are on intersections
-        on_node = self.agents.select(self.agents.remaining_dist_on_edge == 0)
+        not_finished = self.agents.select(self.agents.finished == False)
+        on_node = not_finished.select(not_finished.remaining_dist_on_edge == 0)
         on_path_node = on_node.select(ap.AttrIter(list((map(len, on_node.metric_path)))) != 2)
         on_penultimate_node = on_node.select(ap.AttrIter(list((map(len, on_node.metric_path)))) == 2)
         
+        """ Let agents evaluate their situation and update reporter variables. """
         # Reset compliance status from previous edge
         on_node.reset_compliance_status()
         # Check for interventions unless destination is on next edge
@@ -516,29 +514,17 @@ class DistanceKeepingModel(ap.Model):
         # Update edge attributes for reporters
         on_node.update_edge_attributes()
 
+        """ Movement of agents. """ 
         # let all agents walk for duration of one timestep or until next intersection is reached
-        self.agents.walk()
+        not_finished.walk()
 
+        """ Update reporters for agent who reached their destination in this timestep. """ 
         # select agents thats have reached destination and calculate route statistics
-        at_final_node = self.agents.select(ap.AttrIter(list((map(len, self.agents.metric_path)))) == 1)
+        at_final_node = not_finished.select(ap.AttrIter(list((map(len, not_finished.metric_path)))) == 1)
         at_final_node.finish_route_and_calc_statistics()
 
         self.step_counter += 1
-        # only evaluated in the last step
-        if self.step_counter == self.p.steps:
-            # eliminate destinations of Agents, that doesn't reach their destinations in the model run
-            for agent in self.agents:
-                would_walk_beyond_next_node = (agent.walking_distance > agent.remaining_dist_on_edge)
-                is_on_last_edge = (len(agent.metric_path) == 2)
-                if is_on_last_edge:
-                    if not would_walk_beyond_next_node:
-                        agents_destination_dict = agent.model.destination_list[(agent.id) - 1]
-                        if 'new_assigned_dest' in agents_destination_dict:
-                            agents_destination_dict.pop('new_assigned_dest')
-                else:
-                    agents_destination_dict = agent.model.destination_list[(agent.id) - 1]
-                    if 'new_assigned_dest' in agents_destination_dict:
-                        agents_destination_dict.pop('new_assigned_dest')
+
     def update(self):
         # update edge pedestrian counter attributes
         ppl_count = Counter(nx.get_edge_attributes(self.model.G, "ppl_count"))
@@ -558,10 +544,10 @@ class DistanceKeepingModel(ap.Model):
         self.model.record('compliances')
         
         # update fake date for temporal viz in qgis
-        time = datetime.datetime(2000, 1, 1, self.step_counter * self.model.p.duration // 3600, (self.step_counter * self.model.p.duration // 60) % 60 , self.step_counter * self.model.p.duration % 60)
+        time = datetime.datetime(2000, 1, 1, self.step_counter * self.p.duration // 3600, (self.step_counter * self.p.duration // 60) % 60 , self.step_counter * self.p.duration % 60)
         
+        if(self.p.positions):
         # store all the agents current location in list and add time and counter attributes
-        if(self.model.p.positions):
             positions = self.agents.location.copy()
             for agent_position in positions:
                 agent_position['time']= time
@@ -571,14 +557,23 @@ class DistanceKeepingModel(ap.Model):
         # store edge information in dataframe
         nx.set_edge_attributes(self.model.G, self.step_counter, "counter")
         nx.set_edge_attributes(self.model.G, time, "time")
-        edges = momepy.nx_to_gdf(self.model.G, points=False)
-        self.edge_gdf.append(edges)
+
+        if(self.p.edges):
+            edges = momepy.nx_to_gdf(self.model.G, points=False)
+            self.edge_gdf.append(edges)
+
+        # if all agents finished their routes -> end model run. 
+        # Event can only occur if model parameter "assign_new_destinations" == False
+        if(len(self.agents.select(self.agents.finished == True)) == self.p.agents):
+            self.model.stop()
 
     def end(self):
+        """ Compute evaluation measures (means, standard deviations, variances). """
         self.mean_nod = np.mean(self.NODs)
         self.std_nod = np.std(self.NODs)
         self.var_nod = np.var(self.NODs)
-        if self.model.p.scenario == "complex_compliance":
+        # compliance probabilites are only relevant in complex_compliance scenario, otherwise set values to None
+        if self.p.scenario == "complex_compliance":
             self.mean_non_comp_prob = np.mean(self.non_comp_probs)
             self.std_non_comp_prob = np.std(self.non_comp_probs)
             self.var_non_comp_prob = np.var(self.non_comp_probs)
@@ -602,68 +597,43 @@ class DistanceKeepingModel(ap.Model):
         self.report('mean_comp_prob')
         self.report('std_comp_prob')
         self.report(['non_compliances', 'compliances', 'no_route_changes', 'random_reroutings'])
-        print(f" absolute non-compliance-probabilities: {len(self.non_comp_probs)}")
-        print(f" absolute compliance-probabilities: {len(self.comp_probs)}")
         self.report('SPLs')
         self.report('TPLs')
         self.report('NODs')
-        print(f" absolute NODs: {len(self.NODs)}")
         self.report('non_comp_probs')
         self.report('comp_probs')
+
+        """ Produce spatial output files. """
         # create output directory
         Path("./Experiment/output/%d" % self.p.epoch_time).mkdir(parents=True, exist_ok=True)
-        # output density maximum per street
-        nx.set_edge_attributes(self.G, self.max_density, "max_density")
-        max_density_gdf = momepy.nx_to_gdf(self.G, points=False)
-        max_density_gdf.to_file("./Experiment/output/%d/max_density_%s.gpkg" % (self.p.epoch_time, (str(self._run_id[0]) + "_" + str(self._run_id[1]))), driver='GPKG', layer='Max Density Edges') 
-        # output position data as gpkg
-        if(self.model.p.positions):
-            all_positions = pd.DataFrame(self.position_list) 
-            final_gdf = geopandas.GeoDataFrame(all_positions, geometry=all_positions['geometry'], crs="EPSG:5652")
-            final_gdf.to_file('./Experiment/output/%d/positions_%s.gpkg' % (self.p.epoch_time, (str(self._run_id[0]) + "_" + str(self._run_id[1]))), driver='GPKG', layer='Agents_temporal') 
-        # output edge data as gpkg
-        if(self.model.p.edges):
-            final_edge_gdf = pd.concat(self.edge_gdf, ignore_index=True)        
-            final_edge_gdf.to_file('./Experiment/output/%d/edges_%s.gpkg' % (self.p.epoch_time, (str(self._run_id[0]) + "_" + str(self._run_id[1]))), driver='GPKG', layer='Edges_temporal')
-            self.nodes[['degree', 'nodeID', 'geometry', 'compliances','non_compliances', 'random_reroutings', 'no_route_changes']].to_file('./Experiment/output/%d/compliance_locations_%s.gpkg' % (self.p.epoch_time, (str(self._run_id[0]) + "_" + str(self._run_id[1]))), driver='GPKG', layer='Compliance Occurences')
-        if(self.model.p.destination_log):
-            all_destinations = pd.DataFrame(self.destination_list)
-            # clears out the column "new_assigned_dest" if there are any new assigned destinations in the destinations Dataframe
-            if 'new_assigned_dest' in all_destinations.columns:
-                initial_destinations = all_destinations.drop(['new_assigned_dest'], axis=1)
-            else:
-                initial_destinations = all_destinations
-            # drop duplicate geometry and build geodataFrame
-            initial_destination_gdf = geopandas.GeoDataFrame(initial_destinations.drop('initial_dest', axis=1),
-                                                            geometry=initial_destinations['initial_dest'],
-                                                            crs="EPSG:5652")
-            initial_destination_gdf.to_file(f'./output/initial_destinations_{self.p.placeholder_destination_test}.gpkg',
-                                            driver='GPKG', layer=f'initial_dest_{self.p.placeholder_destination_test}')
-
-            # clear out NaNs in 'new_assigned_dest' (they come from agents, that dont get a new destination assigned)
-            if 'new_assigned_dest' in all_destinations.columns:
-                new_assigned_dest = all_destinations.dropna(axis=0, how='any', inplace=False)
-                new_assigned_dest = new_assigned_dest.drop('initial_dest', axis=1)
-                new_assigned_dest = new_assigned_dest.reset_index(drop=True)
-                # drop duplicate geometry and build geodataFrame
-                new_assigned_gdf = geopandas.GeoDataFrame(new_assigned_dest.drop('new_assigned_dest', axis=1),
-                                                        geometry=new_assigned_dest['new_assigned_dest'],
-                                                        crs="EPSG:5652")
-                new_assigned_gdf.to_file(f'./output/new_assigned_destinations_{self.p.placeholder_destination_test}.gpkg',
-                                        driver='GPKG', layer=f'new_assigned_dest_{self.p.placeholder_destination_test}')
-
-
+        # If not an Experiment set self._run_id object (sampleID and iteration in experiments)
+        if(self._run_id == None):
+            self._run_id = ["X","X"]
+        if(self.p.max_densities):
+            # output density maximum per street
+            soc.save_maximum_densities_to_file(self.G, self.max_density, self.p.epoch_time, self._run_id[0], self._run_id[1])    
+        if(self.p.positions):
+            # output position data as gpkg
+            soc.save_positions_to_file(self.position_list, self.p.epoch_time, self._run_id[0], self._run_id[1])
+        if(self.p.edges):
+            # output edge data as gpkg
+            soc.save_edges_to_file(self.edge_gdf, self.p.epoch_time, self._run_id[0], self._run_id[1])
+        if(self.p.compliance_nodes):
+            # output compliance nodes as gpkg
+            soc.save_compliance_nodes_to_file(self.nodes, self.p.epoch_time, self._run_id[0], self._run_id[1])
+        if(self.p.destination_log):
+            for agent in self.agents:
+                self.destination_list.append(agent.destination_dict) # just for bugfixing
+            # output destination data as gpkg
+            soc.save_destinations_to_file(self.destination_list, self.p.epoch_time)
+        
+        """ Logs for debugging. """
         if (self.p.logging):
             print("Compliances: " + str(self.compliances) + "; Non-Compliances: " + str(self.non_compliances))
-    def visualize_model(self):
-        """Visualizes the model as animation.
-            TODO: Update visualization part.
-        """
-        f, ax = plt.subplots(figsize=(10, 10))
-        self.nodes.plot(ax=ax, column='degree', cmap='tab20b', markersize=(2 + self.nodes['nodeID'] * 4), zorder=2)
-        self.edges.plot(ax=ax, color='lightgrey', zorder=1)
-        ax.set_axis_off()
-        plt.show()
+            print(f" absolute non-compliance-probabilities: {len(self.non_comp_probs)}")
+            print(f" absolute compliance-probabilities: {len(self.comp_probs)}")
+            print(f" absolute NODs: {len(self.NODs)}")
+
             
     def create_graph(self, streets_gpkg):
         """Creates the network graph for the model based on an given gpkg linestring file. 
@@ -713,190 +683,4 @@ class DistanceKeepingModel(ap.Model):
         density = nx.get_edge_attributes(self.G, "density")
         self.max_density = density
         nx.set_edge_attributes(self.G, 0, "max_density")
-
-
-# specify model parameters
-# --------------------------------–-----
-# To run the model once using optimal parameters use the following code:
-
-# optimal_parameters = {
-#     'agents': 400,
-#     'steps': 100,
-#     'viz': False,
-#     'duration': 5,
-#     # Including participants walking through forbidden streets as result of random rerouting:
-#     # 'random_rerouting_probability': 0.28,
-#     # Excluding participants walking through forbidden streets as result of random rerouting:
-#     'random_rerouting_probability': 0.235,
-#     'weight_constant': 0.1899,
-#     'weight_rtd': 3.8243,
-#     'weight_ows': -1.2794,
-#     'seed': 40,
-#     'weight_density': 0,
-#     'streets_path': "./input-data/quakenbrueck_street_width.gpkg",
-#     'logging': False,
-#     # Choose value from ['no_interventions', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
-#     # Scenario 1: 'no_interventions' = Agents behave like there are no measures 
-#     # Scenario 2: 'simple_complicance' = Agents comply with every measure
-#     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
-#     'scenario': 'complex_compliance',
-#     'epoch_time': int(time.time()),
-#     'origin_destination_pairs': False,
-#     'positions': False
-
-# }
-
-# model = DistanceKeepingModel(exp)
-# results = model.run()
-# --------------------------------–-----
-
-sa_parameters = {
-    'agents': 20,
-    'steps': 720,
-    'viz': False,
-    'duration': 5,
-    'constant_weight_mean': 0.3424823265591154,
-    'constant_weight_sd': 0.4042530941646003,
-    'rtd_weight_mean': 4.062769564671944, 
-    'rtd_weight_sd': 1.7983272569373019,
-    'ows_weight_mean': -1.686987748677264, 
-    'ows_weight_sd': 0.453969999609177449,
-    'seed': 43,
-    'weight_density': 0,
-    'streets_path': "./input-data/quakenbrueck_street_width.gpkg",
-    'logging': False,
-    'walking_speed_mean': 1.25,
-    'walking_speed_std': 0.21,
-    # Choose value from ['no_interventions', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
-    # Scenario 1: 'no_interventions' = Agents behave like there are no measures 
-    # Scenario 2: 'simple_complicance' = Agents comply with every measure
-    # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
-    'scenario': 'complex_compliance',
-    'epoch_time': int(time.time()),
-    'origin_destination_pairs': False,
-    # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])]),
-    'positions': False,
-    'destination_log': True,
-    'edges' : False,
-    'placeholder_destination_test': "",
-}
-
-# --------------------------------–-----
-# To perform experiment use commented code:
-
-exp_parameters = {
-    'agents': 20,
-    'steps': 720,
-    'viz': False,
-    'duration': 5,
-    'constant_weight_mean': 0.3424823265591154,
-    'constant_weight_sd': 0.4042530941646003,
-    'rtd_weight_mean': 4.062769564671944, 
-    'rtd_weight_sd': 1.7983272569373019,
-    'ows_weight_mean': -1.686987748677264, 
-    'ows_weight_sd': 0.453969999609177449,
-    'seed': 43,
-    'weight_density': 0,
-    'streets_path': "./input-data/quakenbrueck_street_width.gpkg",
-    'logging': False,
-    'walking_speed_mean': 1.25,
-    'walking_speed_std': 0.21,
-    # Choose value from ['no_interventions', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
-    # Scenario 1: 'no_interventions' = Agents behave like there are no measures 
-    # Scenario 2: 'simple_complicance' = Agents comply with every measure
-    # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
-    'scenario': ap.Values('no_interventions', 'simple_compliance', 'complex_compliance'),
-    'epoch_time': int(time.time()),
-    'origin_destination_pairs': False,
-    # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])]),
-    'positions': False,
-    'destination_log': False,
-    'edges' : False,
-    'placeholder_destination_test': "",
-}
-
-sample = ap.Sample(exp_parameters, randomize=False)
-
-# Perform experiment
-exp = ap.Experiment(DistanceKeepingModel, sample, iterations=1, record=True)
-#results = exp.run(n_jobs=-1, verbose=10)
-#results.save(exp_name='Test_experiment', exp_id=exp_parameters['epoch_time'], path='Experiment', display=True)
-
-# TO RUN SINGLE MODEL RUN, COMMENT PREVIOUS LINES AND UNCOMMENT NEXT TWO LINES:
-# model = DistanceKeepingModel(exp_parameters)
-# results = model.run()
-
-
-#  ------ ANIMATION ------------------------
-anim_parameters = {
-    'agents': 2000,
-    'steps': 720,
-    'viz': False,
-    'duration': 5,
-    'constant_weight_mean': 0.3424823265591154, 
-    'constant_weight_sd': 0.4042530941646003,
-    'rtd_weight_mean': 4.062769564671944, 
-    'rtd_weight_sd': 1.7983272569373019,
-    'ows_weight_mean': -1.686987748677264, 
-    'ows_weight_sd': 0.453969999609177449,
-    'seed': 43,
-    'weight_density': 0,
-    'streets_path': "./input-data/quakenbrueck_street_width.gpkg",
-    'logging': False,
-    'walking_speed_mean': 1.25,
-    'walking_speed_std': 0.21,
-    # Choose value from ['no_interventions', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
-    # Scenario 1: 'no_interventions' = Agents behave like there are no measures 
-    # Scenario 2: 'simple_complicance' = Agents comply with every measure
-    # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
-    'scenario': 'complex_compliance',
-    'epoch_time': int(time.time()),
-    'origin_destination_pairs': False,
-    # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])]),
-    'positions': False,
-    'destination_log': False,
-    'edges' : False,
-}
-
-from IPython.display import HTML
-
-def animation_plot_single(m, ax):
-    ndim = 2
-    ax.set_title(f"Dist-KISS Model {ndim}D t={m.t}")
-    pos = m.space.positions.values()
-    pos = np.array(list(pos)).T  # Transform
-    lines = m.edges.translate(xoff=-m.x_min, yoff=-m.y_min, zoff=0.0)
-    lines.plot(ax=ax,color = 'green', label = 'network', zorder=1)
-    ax.scatter(*pos, s=2, c='black', zorder=2)
-    ax.set_xlim(0, m.width)
-    ax.set_ylim(0, m.height)
-    ax.set_axis_off()
-
-def animation_plot(m, p):
-    projection = None
-    fig = plt.figure(figsize=(7,7))
-    ax = fig.add_subplot(111, projection=projection)
-    animation = ap.animate(m(p), fig, ax, animation_plot_single)    
-    with open("data_%d.html" % m(p).p.epoch_time, "w") as file:
-        file.write(animation.to_jshtml(fps=10))
-    # return HTML(animation.to_jshtml(fps=20))
-import matplotlib
-matplotlib.rcParams['animation.embed_limit'] = 2**128
-
-# TO PRODUCE ANIMATION UMCOMMENT THE FOLLOWING LINE:
-# animation_plot(DistanceKeepingModel, anim_parameters)
-print("Script completed.")
-# --------------------------------–-----
-
-
-# ---------------   EXTERNAL PARAMETERS   -----------------–-----
-# To use external parameters for experiment use commented code:
-# external_parameters = "put_external_parameters_here"
-
-# sample = ap.Sample(external_parameters, randomize=False)
-
-# # Perform experiment
-# exp = ap.Experiment(DistanceKeepingModel, sample, iterations=1, record=True)
-# results = exp.run(n_jobs=-1, verbose = 10)
-# results.save(exp_name='Test_experiment', exp_id=None, path='Experiment', display=True)
 

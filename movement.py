@@ -81,7 +81,7 @@ def get_random_org_dest(graph, edges, rng, min_dist):
         dest = generate_random_point_on_line(graph, edges, rng)
     return orig, dest
 
-def get_random_dest(orig, edges, rng, min_dist):
+def get_random_dest(graph, orig, edges, rng, min_dist):
     """Create random origin, destination pair with minimum distance of min_dist between both points.
     
     Parameters
@@ -97,9 +97,9 @@ def get_random_dest(orig, edges, rng, min_dist):
         Dicts for origin and destination and including nearest node id and id of wider away other node on edge, and distances to both. 
 
     """
-    dest = generate_random_point_on_line(edges, rng)
+    dest = generate_random_point_on_line(graph, edges, rng)
     while orig['point'].distance(dest['point']) < min_dist:
-        dest = generate_random_point_on_line(edges, rng)
+        dest = generate_random_point_on_line(graph, edges, rng)
     return dest
 
 
