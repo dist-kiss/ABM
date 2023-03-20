@@ -2,11 +2,12 @@ import distkiss_abm
 import agentpy as ap
 import time
 
-optimal_parameters = {
-    'agents': 2000,
-    'steps': 720,
+exp_parameters = {
+    'agents': 100, # number of agents 
+    'steps': 720, # number of timesteps (model stops if all agents reached their destination before the amount of steps is reached) 
     'duration': 5,
-    'streets_path': "./input-data/quakenbrueck_street_width.gpkg",
+    'streets_path': "../input_data/quakenbrueck_street_width.gpkg",
+    # Model weights
     'constant_weight_mean': 0.3424823265591154,
     'constant_weight_sd': 0.4042530941646003,
     'rtd_weight_mean': 4.062769564671944, 
@@ -23,7 +24,7 @@ optimal_parameters = {
     # Scenario 1: 'no_interventions' = Agents behave like there are no measures 
     # Scenario 2: 'simple_compliance' = Agents comply with every measure
     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
-    'scenario': 'complex_compliance',
+    'scenario': ap.Values('no_interventions','simple_compliance','complex_compliance'),
     # Choose when to record non compliance probability (basically choose definition of non compliance); Default is True:
     # False = Non compliance is only where agent initially wanted to walk into forbidden one way street
     # True = Additionally in situations, in which agent keeps its route doing a second evalutation after initally 
@@ -38,14 +39,18 @@ optimal_parameters = {
     'origin_destination_pairs': False,
     # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])]),
     # Whether positions, edges and destination should be saved as gpkg files:
-    'positions': True,
-    'edges' : True,
+    'positions': False,
+    'edges' : False,
     'destination_log': False,
-    'compliance_nodes': True,
-    'max_densities': True,
+    'compliance_nodes': False,
+    'max_densities': False,
     # Add logs for debugging
     'logging': False,
 }
 
-model = distkiss_abm.DistanceKeepingModel(optimal_parameters)
-results = model.run()
+sample = ap.Sample(exp_parameters, randomize=False)
+
+# Perform experiment
+exp = ap.Experiment(distkiss_abm.DistanceKeepingModel, sample, iterations=1, record=True)
+results = exp.run(n_jobs=-1, verbose=10)
+results.save(exp_name='E', exp_id=exp_parameters['epoch_time'], path='Experiment', display=True)

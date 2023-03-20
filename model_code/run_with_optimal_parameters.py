@@ -2,12 +2,11 @@ import distkiss_abm
 import agentpy as ap
 import time
 
-parameters = {
-    'agents': 100, # number of agents 
-    'steps': 720, # number of timesteps (model stops if all agents reached their destination before the amount of steps is reached) 
+optimal_parameters = {
+    'agents': 2000,
+    'steps': 720,
     'duration': 5,
-    'streets_path': "./input-data/quakenbrueck_street_width.gpkg",
-    # Model weights
+    'streets_path': "../input_data/quakenbrueck_street_width.gpkg",
     'constant_weight_mean': 0.3424823265591154,
     'constant_weight_sd': 0.4042530941646003,
     'rtd_weight_mean': 4.062769564671944, 
@@ -39,14 +38,14 @@ parameters = {
     'origin_destination_pairs': False,
     # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])]),
     # Whether positions, edges and destination should be saved as gpkg files:
-    'positions': False,
-    'edges' : False,
+    'positions': True,
+    'edges' : True,
     'destination_log': False,
-    'compliance_nodes': False,
-    'max_densities': False,
+    'compliance_nodes': True,
+    'max_densities': True,
     # Add logs for debugging
     'logging': False,
 }
 
-model = distkiss_abm.DistanceKeepingModel(parameters)
+model = distkiss_abm.DistanceKeepingModel(optimal_parameters)
 results = model.run()

@@ -9,7 +9,7 @@ anim_parameters = {
     'agents': 50, # number of agents 
     'steps': 720, # number of timesteps (model stops if all agents reached their destination before the amount of steps is reached) 
     'duration': 5,
-    'streets_path': "./input-data/quakenbrueck_street_width.gpkg",
+    'streets_path': "../input_data/quakenbrueck_street_width.gpkg",
     # Model weights
     'constant_weight_mean': 0.3424823265591154,
     'constant_weight_sd': 0.4042530941646003,
@@ -70,7 +70,7 @@ def animation_plot(m, p):
     fig = plt.figure(figsize=(7,7))
     ax = fig.add_subplot(111, projection=projection)
     animation = ap.animate(m(p), fig, ax, animation_plot_single)    
-    with open("animations/Model_%d_Animation.html" % m(p).p.epoch_time, "w") as file:
+    with open("../animation_output/Model_%d_Animation.html" % m(p).p.epoch_time, "w") as file:
         file.write(animation.to_jshtml(fps=10))
     # return HTML(animation.to_jshtml(fps=20))
 import matplotlib

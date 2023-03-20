@@ -9,7 +9,7 @@ sa_parameters = {
     'agents': 100, # number of agents 
     'steps': 2000, # number of timesteps (model stops if all agents reached their destination before the amount of steps is reached) 
     'duration': 5,
-    'streets_path': "./input-data/quakenbrueck_street_width.gpkg",
+    'streets_path': "../input_data/quakenbrueck_street_width.gpkg",
     # For SA set SD values to 0 and only vary mean value -> all agents within one model run will get the same parameters
     # Range (mean-SD, mean+SD) is used here. TODO: Vary range. E.g. use (mean*0.5, mean*2) or similar 
     'constant_weight_mean': ap.Range(0.3424823265591154-0.4042530941646003, 0.3424823265591154+0.4042530941646003),
