@@ -57,7 +57,7 @@ There are several files that can be used to run the model for different purposes
 
 1. **run_single_model_run.py** - This is the simplest of all version. The model is run for the scenario of "complex" compliance behavior (agents dynamically decide to comply or not to comply and to reroute) with a default configuration of 200 agents and 720 timesteps (1 hour time equivalent). All outputs are disabled in the parameter set. The model will run, but produce an empty output folder. Output parameters can be set to true, to generate outputs. 
 
-2. **run_with_optimal_parameters.py** - Similar to the **run_single_model_run** but wit 2000 agents and model outputs are activated. These are: (1) positions of all agents for all timesteps (2) edges, with pedestrian counts, for all timesteps, (3) compliance nodes and (4) edges with maximum density over all timesteps are created as outputs.
+2. **run_with_optimal_parameters.py** - Similar to the **run_single_model_run** but with 2000 agents and model outputs are activated. These are: (1) positions of all agents for all timesteps (2) edges, with pedestrian counts, for all timesteps, (3) compliance nodes and (4) edges with maximum density over all timesteps are created as outputs.
 
 3. **animate_model.py** - This file creates a html animation as output. The animation shows the street network with agents and their positions as dots over time.
 
