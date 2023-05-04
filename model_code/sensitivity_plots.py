@@ -3,8 +3,8 @@ import numpy as np
 import seaborn as sns
 
 # Function for plotting
-def plot_sobol(results):
-    """ Bar plot of Sobol sensitivity indices. """
+def plot_sobol_all_indices_horizontal(results):
+    """ Bar plot of Sobol sensitivity indices. Plots indices of all orders that were calculated"""
 
     sns.set()
     fig, axs = plt.subplots(1, 2, figsize=(8, 4))
@@ -24,32 +24,132 @@ def plot_sobol(results):
     plt.show()
 
 
-def plot_barchart(contributions_to_var_nod, contributions_to_var_non_comp_prob):
-    # Labels for the bars
-    model_outputs = ('var_nod', 'var_non_comp_prob')
+def get_data_from_DataDict(datadict, get_second_order_data=False):
+    """Returns dictionary with sobol-first-order indices for each tested input parameter. Each entry is a list with
+    one value per output parameter"""
 
-    # Dictionary with values of the contribution to the variances. Also used for labeling the bars in the plot
+    # get dataframe with all S1-indices for the reporters
+    df_mean_nod = datadict.sensitivity.sobol['S1']['mean_nod']
+    df_mean_non_comp_prob = datadict.sensitivity.sobol['S1']['mean_non_comp_prob']
+
+    contribution_to_variance_in_mean_nod = []
+    contribution_to_variance_in_mean_non_comp_prob = []
+
+    # transform dataframe values into a list
+    for percentage in df_mean_nod:
+        contribution_to_variance_in_mean_nod.append(percentage)
+
+    for percentage in df_mean_non_comp_prob:
+        contribution_to_variance_in_mean_non_comp_prob.append(percentage)
+
+    # Dictionary of input parameters and their contribution to the variance mean_nod and mean_non_comp_prob. Also used for labeling the bars in the plot
     percentages = {
-        'walking_speed': [contributions_to_var_nod[0], contributions_to_var_non_comp_prob[0]],
-        'constant_weight': [contributions_to_var_nod[1], contributions_to_var_non_comp_prob[1]],
-        'rtd_weight': [contributions_to_var_nod[2], contributions_to_var_non_comp_prob[2]],
-        'ows_weight': [contributions_to_var_nod[3], contributions_to_var_non_comp_prob[3]]
+        'regression constant': [contribution_to_variance_in_mean_nod[0], contribution_to_variance_in_mean_non_comp_prob[0]],
+        'weight relative-total-detour': [contribution_to_variance_in_mean_nod[1], contribution_to_variance_in_mean_non_comp_prob[1]],
+        'weight oneway-street': [contribution_to_variance_in_mean_nod[2], contribution_to_variance_in_mean_non_comp_prob[2]],
+        'mean walking speed': [contribution_to_variance_in_mean_nod[3], contribution_to_variance_in_mean_non_comp_prob[3]],
     }
 
-    fig, ax = plt.subplots()
+    # Add second-order indice data to percentages dict
+    if get_second_order_data:
+        contribution_to_variance_in_mean_nod_by_snd_order_effects = 1 - sum(contribution_to_variance_in_mean_nod)
+        contribution_to_variance_in_mean_non_comp_prob_by_snd_order_effects = 1 - sum(contribution_to_variance_in_mean_non_comp_prob)
+        percentages['snd_order_effects'] = [
+            contribution_to_variance_in_mean_nod_by_snd_order_effects,
+            contribution_to_variance_in_mean_non_comp_prob_by_snd_order_effects
+        ]
+
+    return percentages
+
+
+def plot_vertical_stacked_barchart(results,print_second_order_indices=False):
+    # Adjust the code, to create the needed plot
+
+    percentages = get_data_from_DataDict(results, print_second_order_indices)
+
+    fig, ax = plt.subplots(figsize=(2, 2), dpi=250)
+    output_parameters = ('mean\n normalised\n observed detour', 'mean\n non compliance\n probability')
+
     # create array of 0 to store the different layers in the bars
-    bottom = np.zeros(2)
+    bottom = np.zeros(len(output_parameters))
+    width_bar = 0.7
+
+    # set colors for each stacked parameter
+    if print_second_order_indices:
+        colors = ['cornflowerblue', 'orange', 'plum', 'limegreen', "green"]
+    else:
+        colors = ['cornflowerblue', 'orange', 'plum', 'limegreen']
 
     # loop through all Label+Percentage-Tuples to create the bars for the plot
-    for label, percentage in percentages.items():
-        ax.bar(model_outputs, percentage, width=0.5, label=label, bottom=bottom)
+    for color, data in zip(colors, percentages.items()):
+        label = data[0]
+        percentage = data[1]
+        ax.bar(x=output_parameters, height=percentage, width=width_bar, label=label, bottom=bottom, color=color)
         # base values to put the next "Layer" of values ontop
         bottom += percentage
 
-    ax.set_title("Sensitivity Analysis")
-    ax.set_ylabel('contribution to total variance [in %]')
-    plt.tight_layout(rect=[0, 0, 0.75, 1])
-    # create right-aligned legend
-    ax.legend(title='input parameters', bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
+    # Format axes information
+    ax.set_title("Sobol First Order Indices", fontsize=9)
+    ax.set_xlabel('model output')
+    ax.set_xlim(-0.7, len(output_parameters)-0.3)
 
+    ax.set_ylabel('contribution to model output variance')
+    ax.set_ylim([0, 1])
+
+
+    # create bottom-centered legend, outside of the axes. The legend is aligned to the figure, instead of the Axes-Object.
+    plt.legend(bbox_to_anchor=(0.02, 0.02, 1, 0.02), loc="lower center", bbox_transform=fig.transFigure, ncol=2)
+    plt.subplots_adjust(bottom=0.4, left=0.3, right=0.5) # make room for legend
+
+    plt.tight_layout()
     plt.show()
+    fig.savefig("..\Plots\\vertical_barchart_sobol_indices.pdf", dpi=250, bbox_inches='tight')
+
+def plot_horizontal_stacked_barchart(results, print_second_order_indices=False):
+    # Adjust the code, to create the needed plot
+
+    percentages = get_data_from_DataDict(results, print_second_order_indices)
+
+    fig, ax = plt.subplots(figsize=(5.9, 2.5), dpi=250)
+    output_parameters = ('mean\n normalised\n observed detour', 'mean\n non compliance\n probability')
+
+    # create array of 0 to store the different layers in the bars
+    left = np.zeros(len(output_parameters))
+    height_bar = 0.7
+
+    # set colors for each stacked parameter
+    if print_second_order_indices:
+        colors = ['cornflowerblue', 'orange', 'plum', 'limegreen', "green"]
+    else:
+        colors = ['cornflowerblue', 'orange', 'plum', 'limegreen']
+
+
+    # loop through all Label+Percentage-Tuples to create the bars for the plot
+    for color, data in zip(colors, percentages.items()):
+        label = data[0]
+        percentage = data[1]
+        ax.barh(y=output_parameters, width=percentage, left=left, height=height_bar, label=label, color=color)
+        # base values to put the next "Layer" of values on top
+        left += percentage
+
+    # Format axes information
+    ax.set_title("Sobol First Order Indices", fontsize=9)
+    ax.set_xlim([0, 1])
+    ax.set_xlabel('contribution to model output variance', fontsize=8)
+    ax.tick_params(axis="x", direction="in")
+    ax.tick_params(axis='y', labelsize=8)
+
+    ax.set_ylim(-0.635, 2.11)
+    ax.yaxis.set_ticks_position('none')
+    ax.set_ylabel('model output', fontsize=9)
+
+    # create legend inside the axes
+    plt.legend(loc='upper center', ncol=2, fontsize=8, frameon=False)
+    plt.tight_layout()
+    #plt.subplots_adjust(bottom=0.4, left=0.292, right=0.962, top=0.912) # make room for legend
+    plt.show()
+    fig.savefig("..\Plots\\horizontal_barchart_sobol_indices.pdf", dpi=250, bbox_inches='tight')
+
+
+
+
