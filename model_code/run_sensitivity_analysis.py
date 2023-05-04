@@ -3,11 +3,6 @@ import agentpy as ap
 import time
 import sensitivity_plots as splot
 
-# Choose which blocks to run
-run_sensitivity_analysis = False
-load_data_and_calc_sobol_indices = True
-
-
 # Model parameters for sensitivity analysis (SA)
 sa_parameters = {
     'agents': 100, # number of agents
@@ -60,31 +55,20 @@ sample = ap.Sample(
     calc_second_order=True
 )
 
-if run_sensitivity_analysis:
-    # Run experiment.
-    sa_exp = ap.Experiment(distkiss_abm.DistanceKeepingModel, sample, iterations=1, record=False)
-    results = sa_exp.run(n_jobs=-1, verbose=10)
 
-    # Save results to "./sensitivity_data/<exp_name>_<exp_id>" (change exp_id for multiple runs)
-    results.save(exp_name='SA_Exp_Saltelli', exp_id="low_0,25_up_1,25_N16_Iter_100", path='sensitivity_data', display=True)
+# Run experiment.
+sa_exp = ap.Experiment(distkiss_abm.DistanceKeepingModel, sample, iterations=1, record=False)
+results = sa_exp.run(n_jobs=-1, verbose=10)
 
-    # Plot histograms of reporters.
-    results.reporters.hist()
+# Save results to "./sensitivity_data/<exp_name>_<exp_id>" (change exp_id for multiple runs)
+results.save(exp_name='SA_Exp_Saltelli', exp_id="low_0,25_up_1,25_N16_Iter_100", path='sensitivity_data', display=True)
 
-    # Calculate sobol indices on a given set of output metrics
-    sob_results = results.calc_sobol(reporters=['mean_non_comp_prob', 'mean_nod'])
+# Plot histograms of reporters.
+results.reporters.hist()
 
-    # Plot sensitivity results as barchart.
-    splot.plot_sobol_all_indices_horizontal(sob_results)
+# Calculate sobol indices on a given set of output metrics
+sob_results = results.calc_sobol(reporters=['mean_non_comp_prob', 'mean_nod'])
 
-if load_data_and_calc_sobol_indices:
-    # load results from "./sensitivity_data/<exp_name>_<exp_id>"
-    results = ap.DataDict.load(exp_name='SA_Exp_Saltelli', exp_id="low_-2sd_up_+2sd_N1024_Iter_1_Agents_100", path='sensitivity_data', display=True)
-
-    # Calculate sobol indices on a given set of output metrics
-    sob_results = results.calc_sobol(reporters=['mean_non_comp_prob', 'mean_nod'])
-
-    # Plot sensitivity results as barchart.
-    splot.plot_horizontal_stacked_barchart(sob_results)
-    #splot.plot_vertical_barchart(sob_results)
+# Plot sensitivity results as barchart.
+splot.plot_sobol_all_indices_horizontal(sob_results)
 
