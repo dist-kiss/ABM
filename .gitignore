@@ -6,3 +6,6 @@ __pycache__/
 /local
 /Experiment
 /model_code/sensitivity_data
+.idea/
+_.swp
+/Plots
