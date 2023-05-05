@@ -74,7 +74,7 @@ class Pedestrian(ap.Agent):
         else:
             # Choose random origin and destination within street network
             self.assign_random_od(250, False)
-            
+
             # for debugging:
             if(self.model.p.destination_log):
                 self.destination_dict = {'agentID': self.id, 'initial_dest': self.dest['point'],}
@@ -643,6 +643,9 @@ class DistanceKeepingModel(ap.Model):
         """
         # Read street network as geopackage and convert it to GeoDataFrame
         streets: geopandas.GeoDataFrame = geopandas.read_file(streets_gpkg)
+        # if one way street information is missing, assume there is no one way street
+        streets['one_way'] = streets['one_way'].fillna(False)
+        streets['one_way_reversed'] = streets['one_way_reversed'].fillna(False)
         streets = streets.set_index("ID", drop=False)
         # add default sidwalk_width of 1.5m if none is given
         mask_res = streets['highway'] == 'residential'
