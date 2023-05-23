@@ -18,7 +18,7 @@ exp_parameters = {
     'walking_speed_std': 0.21,
     # Density not used as weight so far.
     'weight_density': 0,
-    'seed': 43,
+    'seed': 43, # TODO: I think this seed is actually not used anywhere in the code
     'epoch_time': int(time.time()),
     # Choose value from ['no_interventions', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
     # Scenario 1: 'no_interventions' = Agents behave like there are no measures 
@@ -51,6 +51,6 @@ exp_parameters = {
 sample = ap.Sample(exp_parameters, randomize=False)
 
 # Perform experiment
-exp = ap.Experiment(distkiss_abm.DistanceKeepingModel, sample, iterations=1, record=True)
+exp = ap.Experiment(distkiss_abm.DistanceKeepingModel, sample, iterations=10, record=True)
 results = exp.run(n_jobs=-1, verbose=10)
 results.save(exp_name='E', exp_id=exp_parameters['epoch_time'], path='Experiment', display=True)

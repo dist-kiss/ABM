@@ -67,13 +67,13 @@ class Pedestrian(ap.Agent):
         self.random_rerouting_nodes = []
         self.no_route_change_nodes = []
 
-        """ Assign origin and destination. """
+        """ Assign origin and destination. """ # PS: assign origin & destination
         if(self.model.p.origin_destination_pairs):
             # Choose origin and destination pair from model parameters
             self.assign_od_node_pair(self.model.p.origin_destination_pairs)
         else:
             # Choose random origin and destination within street network
-            self.assign_random_od(250, False)
+            self.assign_random_od(250, False) # Why a min_dist of 250?
 
             # for debugging:
             if(self.model.p.destination_log):
@@ -81,7 +81,7 @@ class Pedestrian(ap.Agent):
 
         """ Compute initial path and set reporter attributes. """
         # Compute shortest path to destination
-        self.agent_compute_initial_shortest_path(self.orig_name, self.dest_name)
+        self.agent_compute_initial_shortest_path(self.orig_name, self.dest_name) # PS: compute path
         # init reporter variables with agent location
         self.init_reporters()
         self.init_pos = [self.location['geometry'].x - self.model.x_min, self.location['geometry'].y - self.model.y_min]
@@ -90,7 +90,7 @@ class Pedestrian(ap.Agent):
         """Assigns a random origin-destination pair from a tuple of origin-destination-tuples.
             
             Args:
-                od_apirs (tuple): Tuple of OD-Tuples
+                od_pairs (tuple): Tuple of OD-Tuples
         """        
         i = self.randomDestinationGenerator.integers(0, len(od_pairs))
         self.orig_name = od_pairs[i][0]
@@ -121,7 +121,7 @@ class Pedestrian(ap.Agent):
             self.orig['dist_from_nearer'], self.orig_name, self.orig['point'].x,self.orig['point'].y)
         gh.add_temporary_node(self.personal_network, self.dest['nearer_node'], self.dest['remote_node'], 
             self.dest['dist_from_nearer'], self.dest_name, self.dest['point'].x,self.dest['point'].y)
-
+        # what are the temporary nodes actually used for?
     def agent_compute_initial_shortest_path(self, orig, dest):
         """Calculate the shortest path from the agents current location to its destination and the length of the path.
             Stores result as agent variables (list of nodes in a shortest path, float).
@@ -129,7 +129,7 @@ class Pedestrian(ap.Agent):
         Args:
             start_node (int): ID of path starting node
             dest_node (int): ID of path destination node
-        """
+        """ # Mismatch of naming between definition and despcription (e.g. orig != start_node) and as the function is used for instance in the setup, the input args are names, not integers
         self.metric_path = nx.dijkstra_path(self.personal_network, source=orig, target=dest, weight='mm_len')
         self.metric_path_length = nx.path_weight(self.personal_network, self.metric_path, weight='mm_len')
         # store length of shortest path in agent attributes
@@ -284,7 +284,7 @@ class Pedestrian(ap.Agent):
         """Check whether agent reaches next intersection within this timestep and walk until 
             intersection or until timestep is over.
         """
-        would_walk_beyond_next_node = (self.walking_distance > self.remaining_dist_on_edge)
+        would_walk_beyond_next_node = (self.walking_distance > self.remaining_dist_on_edge) # PS: Has reached next node?
         if would_walk_beyond_next_node:
             self.stop_walking_at_node()
         else:
@@ -307,7 +307,7 @@ class Pedestrian(ap.Agent):
         # check if new agents shall be appear in the model after an agent reached its destination
         if(self.model.p.assign_new_destinations):
             # assign new destination to walk towards
-            self.assign_new_destination()
+            self.assign_new_destination() # PS: new agent creation 
             self.space.move_to(self, [self.location['geometry'].x - self.model.x_min, self.location['geometry'].y - self.model.y_min])
         else:
             # mark agent as finished and let it stay at its location
@@ -320,7 +320,7 @@ class Pedestrian(ap.Agent):
         # get next street
         next_edge = movement.get_directed_edge(self.global_graph, self.metric_path[0],self.metric_path[1])
         # check whether it is one way street
-        one_way_street = (1 if next_edge['one_way_reversed'] else 0)
+        one_way_street = (1 if next_edge['one_way_reversed'] else 0) # PS: intervention on current route
         
         # if there is no alternative street at this node, assume agent just keeps walking
         if(self.personal_network.nodes[self.metric_path[0]]['degree'] == 2):
@@ -336,21 +336,21 @@ class Pedestrian(ap.Agent):
         # degree > 2 = intersection of at least two streets
         else:
             # calculate alternative path and detour
-            alt_path, detour = gh.get_alternative_path(self.personal_network, self.metric_path, self.metric_path_length, self.previous_edge, one_way_street, self.id)
+            alt_path, detour = gh.get_alternative_path(self.personal_network, self.metric_path, self.metric_path_length, self.previous_edge, one_way_street, self.id) # PS: detour of alternative route
 
             # evaluate whether to reroute or not
-            deviate_from_path = self.rerouting_decision(detour, next_edge, one_way_street, True)
+            deviate_from_path = self.rerouting_decision(detour, next_edge, one_way_street, True) # PS: rerouting evaluation
 
             # if alternative route is forbidden, re-evaluate decision to reroute
             alt_next_edge = movement.get_directed_edge(self.global_graph, alt_path[0],alt_path[1])
-            is_alt_path_forbidden = alt_next_edge['one_way_reversed']
+            is_alt_path_forbidden = alt_next_edge['one_way_reversed'] # PS: Is there an intervention on new next street?
             if(is_alt_path_forbidden and deviate_from_path):
                 if(self.model.p.scenario == 'simple_compliance'):
                     deviate_from_path = False
                 else:
-                    deviate_from_path = not(self.rerouting_decision(-detour, alt_next_edge, 1, self.model.p.record_second_opinion_ncps))
+                    deviate_from_path = not(self.rerouting_decision(-detour, alt_next_edge, 1, self.model.p.record_second_opinion_ncps)) # PS: Is there an intervention on new next street? yes
 
-            if(deviate_from_path):
+            if(deviate_from_path): # PS: Deviate? yes
                 # deviation + inital was one_way_street = compliance
                 if(one_way_street):
                     self.location['compliance'] = True
@@ -372,7 +372,7 @@ class Pedestrian(ap.Agent):
                     self.num_detours += 1
 
             # no deviation + one way street = non compliance
-            elif(one_way_street):
+            elif(one_way_street): # PS: Deviate? no
                 self.location['non_compliance'] = True
                 self.non_compliance_nodes.append(self.metric_path[0])
             # no deviation + normal street = no_route_change
@@ -485,7 +485,7 @@ class DistanceKeepingModel(ap.Model):
         self.height = math.ceil(self.y_max - self.y_min)
 
         """Create a list of agents. """ 
-        self.agents = ap.AgentList(self, self.p.agents, Pedestrian)
+        self.agents = ap.AgentList(self, self.p.agents, Pedestrian) # PS: Agent creation
 
         self.space = ap.Space(self, shape=[self.width, self.height])
         self.space.add_agents(self.agents, self.agents.init_pos)
@@ -499,9 +499,9 @@ class DistanceKeepingModel(ap.Model):
         """ Select different groups of agents. """ 
         # Select agents that are on intersections
         not_finished = self.agents.select(self.agents.finished == False)
-        on_node = not_finished.select(not_finished.remaining_dist_on_edge == 0)
-        on_path_node = on_node.select(ap.AttrIter(list((map(len, on_node.metric_path)))) != 2)
-        on_penultimate_node = on_node.select(ap.AttrIter(list((map(len, on_node.metric_path)))) == 2)
+        on_node = not_finished.select(not_finished.remaining_dist_on_edge == 0) # PS: Has reached next node? yes
+        on_path_node = on_node.select(ap.AttrIter(list((map(len, on_node.metric_path)))) != 2) # Which agents are selected here? 
+        on_penultimate_node = on_node.select(ap.AttrIter(list((map(len, on_node.metric_path)))) == 2) # Which agents are selected here? 
         
         """ Let agents evaluate their situation and update reporter variables. """
         # Reset compliance status from previous edge
@@ -516,12 +516,12 @@ class DistanceKeepingModel(ap.Model):
 
         """ Movement of agents. """ 
         # let all agents walk for duration of one timestep or until next intersection is reached
-        not_finished.walk()
+        not_finished.walk() # PS: move (at least move is triggered here)
 
-        """ Update reporters for agent who reached their destination in this timestep. """ 
+        """ Update reporters for agent who reached their destination in this timestep. """ # PS: Is current node the destination?
         # select agents thats have reached destination and calculate route statistics
-        at_final_node = not_finished.select(ap.AttrIter(list((map(len, not_finished.metric_path)))) == 1)
-        at_final_node.finish_route_and_calc_statistics()
+        at_final_node = not_finished.select(ap.AttrIter(list((map(len, not_finished.metric_path)))) == 1) # Why are the agents selected from not_finished and not from on_node?
+        at_final_node.finish_route_and_calc_statistics() # PS: stop
 
         self.step_counter += 1
 

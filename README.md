@@ -3,7 +3,7 @@
 
 ### Brief description of contents
 The model can be found in ```model_code/distkiss_abm.py```. Some functions used in the model are outsourced into other files, these are ```model_code/graph_helpers.py```, ```model_code/movement.py```, ```model_code/spatial_output_creator.py```. There are several files to run the model with different parameter sets and configurations called ```run_[...].py```.
-An animation of the model can be created by runnning ```model_code/graph_helpers.py```. To perform a sensitivity analysis use the script ```model_code/sensitivity.py```. 
+An animation of the model can be created by running ```model_code/graph_helpers.py```. To perform a sensitivity analysis use the script ```model_code/sensitivity.py```. 
 
 ### File structure of the repository
 ```
@@ -56,12 +56,14 @@ project
 There are several files that can be used to run the model for different purposes. Here a brief overview of what they are made for is given:
 
 1. **run_single_model_run.py** - This is the simplest of all version. The model is run for the scenario of "complex" compliance behavior (agents dynamically decide to comply or not to comply and to reroute) with a default configuration of 200 agents and 720 timesteps (1 hour time equivalent). All outputs are disabled in the parameter set. The model will run, but produce an empty output folder. Output parameters can be set to true, to generate outputs. 
+<!-- What are the output parameters that need to be set and what do they return? -->
 
 2. **run_with_optimal_parameters.py** - Similar to the **run_single_model_run** but with 2000 agents and model outputs are activated. These are: (1) positions of all agents for all timesteps (2) edges, with pedestrian counts, for all timesteps, (3) compliance nodes and (4) edges with maximum density over all timesteps are created as outputs.
 
 3. **animate_model.py** - This file creates a html animation as output. The animation shows the street network with agents and their positions as dots over time.
 
 4. **run_experiment.py** This is version runs an experiment, where the scenario is varied, between _simple compliance_ (all agents comply with all interventions), _complex compliance_ (agents dynamically decide to comply or not to comply) and _no interventions_ (there are no interventions on the streets). The model is run 10 times (iterations) for each scenario with different model seeds. By default (1) edges, with pedestrian counts, for all timesteps, (2) compliance nodes and (3) edges with maximum density over all timesteps are created as outputs. Additionally, the following outputs are generated in reporters.csv:
+<!-- In the default run_experiment.py, iterations is set to 1 -->
 ```
 mean normalized oberserved detour, std of normalized oberserved detour, variance of normalized oberserved detour, mean non-compliance probability, std of non-compliance probability, variance of non-compliance probability, mean compliance probability, std of compliance probability, number of non-compliances, number of compliances, number of no-route-changes, number of random-reroutings, Array of shortest path lengths, Array of total path legngths, Array of normalized observed detours, Array of non-compliance probabilities, Array of compliance probabilities
 ```

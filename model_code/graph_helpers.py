@@ -3,7 +3,7 @@ import movement
 from shapely.ops import substring, Point, LineString
 
 
-# TODO: FIX initial position bug 
+# TODO: FIX initial position bug (still TODO?)
 def add_temporary_node(graph: nx.Graph, edge_start, edge_end, split_dist, name, x, y):
         """Adds a temporary node to a given graph.
         

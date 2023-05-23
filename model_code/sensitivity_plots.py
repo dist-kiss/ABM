@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
+import seaborn as sns # package missing in ENV.yml
 
 # Function for plotting
 def plot_sobol_all_indices_horizontal(results):
