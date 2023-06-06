@@ -479,7 +479,7 @@ class Pedestrian(ap.Agent):
             # compute probability to stay on path (if ows, this equals non-compliance probability)
             prop_no_deviation = 1 / (1 + math.exp(-z))
 
-            if 0.48 <= prop_no_deviation <= 0.52: #TODO: add a suitable threshold
+            if self.model.p.record_situations and 0.48 <= prop_no_deviation <= 0.52: #TODO: add a suitable threshold
                 # keys for DSG-JSON
                 scenario_name_key = self.model.p.name_dsg_scenario
                 location_name_key = self.location['latest_node']
@@ -731,9 +731,10 @@ class DistanceKeepingModel(ap.Model):
             print(f" absolute non-compliance-probabilities: {len(self.non_comp_probs)}")
             print(f" absolute compliance-probabilities: {len(self.comp_probs)}")
             print(f" absolute NODs: {len(self.NODs)}")
+        if (self.p.record_situations):
+            print(self.scene_dictionaries[40:45])
+            print(len(self.scene_dictionaries))
 
-        print(self.scene_dictionaries[40:45])
-        print(len(self.scene_dictionaries))
 
             
     def create_graph(self, streets_gpkg):
