@@ -3,7 +3,7 @@ import agentpy as ap
 import time
 
 exp_parameters = {
-    'agents': 100, # number of agents 
+    'agents': 400, # number of agents
     'steps': 720, # number of timesteps (model stops if all agents reached their destination before the amount of steps is reached) 
     'duration': 5,
     'streets_path': "../input_data/quakenbrueck_street_width.gpkg",
@@ -24,7 +24,7 @@ exp_parameters = {
     # Scenario 1: 'no_interventions' = Agents behave like there are no measures 
     # Scenario 2: 'simple_compliance' = Agents comply with every measure
     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
-    'scenario': ap.Values('no_interventions','simple_compliance','complex_compliance'),
+    'scenario': 'complex_compliance',# ap.Values('no_interventions','simple_compliance','complex_compliance'),
     # Choose when to record non compliance probability (basically choose definition of non compliance); Default is True:
     # False = Non compliance is only where agent initially wanted to walk into forbidden one way street
     # True = Additionally in situations, in which agent keeps its route doing a second evalutation after initally 
@@ -46,6 +46,7 @@ exp_parameters = {
     'max_densities': False,
     # Add logs for debugging
     'logging': False,
+    'name_dsg_scenario': "testname",
 }
 
 sample = ap.Sample(exp_parameters, randomize=False)
