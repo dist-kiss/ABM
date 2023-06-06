@@ -385,7 +385,7 @@ class Pedestrian(ap.Agent):
         current_node = self.location['latest_node']
         previous_node = [key for key, value in self.personal_network.adj[current_node].items() if self.previous_edge == value][0]
 
-        adjacent_nodes_with_edge_data = list(self.personal_network.adj[current_node].items())
+        adjacent_nodes_with_edge_data = list(self.global_graph.adj[current_node].items())
 
         signs = []
         crowds = []
@@ -399,14 +399,13 @@ class Pedestrian(ap.Agent):
             if next_node == previous_node:
                 continue
 
-            if edge_data['density'] > 0:
-                pass
-
+            # distance are calculated within the agents personal network
             distance = self.calculate_remaining_distance(next_node, current_node, previous_node)
 
             # check, whether edge has the correct orientation
-            corrected_edge = movement.get_directed_edge(self.personal_network, current_node, next_node)
+            corrected_edge = movement.get_directed_edge(self.global_graph, current_node, next_node)
 
+            # signs and crowdedness are calculated within the agents global graph
             # translate ows-boolean to streetsign-string
             sign = scenes.get_signage(corrected_edge)
             # translate density into corresponding integer
@@ -733,7 +732,7 @@ class DistanceKeepingModel(ap.Model):
             print(f" absolute compliance-probabilities: {len(self.comp_probs)}")
             print(f" absolute NODs: {len(self.NODs)}")
 
-        print(self.scene_dictionaries[:5])
+        print(self.scene_dictionaries[40:45])
         print(len(self.scene_dictionaries))
 
             
