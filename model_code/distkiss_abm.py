@@ -16,6 +16,7 @@ from shapely.ops import substring, Point, LineString
 import movement
 import graph_helpers as gh
 import spatial_output_creator as soc
+import dsg_scenes as scenes
 
 class Pedestrian(ap.Agent):
 
@@ -380,6 +381,79 @@ class Pedestrian(ap.Agent):
                 self.location['no_route_change'] = True
                 self.no_route_change_nodes.append(self.metric_path[0])
 
+    def extract_edge_data(self):
+        current_node = self.location['latest_node']
+        previous_node = [key for key, value in self.personal_network.adj[current_node].items() if self.previous_edge == value][0]
+
+        adjacent_nodes_with_edge_data = list(self.personal_network.adj[current_node].items())
+
+        signs = []
+        crowds = []
+        distances = []
+
+        # set index for "direction" key
+        i = 1
+
+        for next_node, edge_data in adjacent_nodes_with_edge_data:
+            # skip calculations for the previous edge of the agent
+            if next_node == previous_node:
+                continue
+
+            if edge_data['density'] > 0:
+                pass
+
+            distance = self.calculate_remaining_distance(next_node, current_node, previous_node)
+
+            # check, whether edge has the correct orientation
+            corrected_edge = movement.get_directed_edge(self.personal_network, current_node, next_node)
+
+            # translate ows-boolean to streetsign-string
+            sign = scenes.get_signage(corrected_edge)
+            # translate density into corresponding integer
+            crowdedness = scenes.get_crowdedness(edge_data)
+
+            # only apply overlays if there are any
+            if sign is not None:
+                signs.append({'direction': i, 'sign': sign})
+            if crowdedness is not None:
+                crowds.append({'direction': i, 'crowdedness': crowdedness})
+            distances.append({'direction': i, 'distance': distance})
+            i += 1
+
+        return signs, crowds, distances
+
+    def calculate_remaining_distance(self, next_node, current_node, previous_node):
+        network = self.personal_network.copy()
+
+        # remove edge agent was previously standing from network (agents cannot turn around)
+        network[current_node][previous_node]['walkable'] = False
+
+        # filter function for creating graph views
+        def filter_edge(n1, n2):
+            return network[n1][n2].get("walkable", True)
+
+        # make edges 'unwalkable' that should be ignored for the shortest path
+        nodes_from_paths_to_remove = [node for node in network.adj[current_node].keys() if node != next_node]
+        for node in nodes_from_paths_to_remove:
+            network[current_node][node]['walkable'] = False
+
+        # subgraph view. All edges except the edge to "next_node" are removed
+        view = nx.subgraph_view(network, filter_edge=filter_edge)
+
+        # calculate shortest path on remaining path
+        shortest_path_to_dest = nx.dijkstra_path(view, source=current_node, target=self.dest_name,
+                                                 weight='mm_len')
+        remaining_distance_on_route = nx.path_weight(network, shortest_path_to_dest, weight='mm_len')
+
+        # round for better reprensentation in the IVE
+        remaining_distance_on_route = round(remaining_distance_on_route)
+
+        # reset walkability
+        for node in nodes_from_paths_to_remove:
+            network[current_node][node]['walkable'] = True
+
+        return remaining_distance_on_route
+
 
     def rerouting_decision(self, detour, edge, ows, record_non_comp_prob):
         """Evalutes whether agent reroutes or continues on its intended path based on one way street interventions and the detour of the alternative path 
@@ -405,7 +479,31 @@ class Pedestrian(ap.Agent):
             z = self.constant_weight + rel_tot_detour * self.rtd_weight + ows * self.ows_weight + edge['density'] * self.model.p.weight_density
             # compute probability to stay on path (if ows, this equals non-compliance probability)
             prop_no_deviation = 1 / (1 + math.exp(-z))
-            
+
+            if 0.48 <= prop_no_deviation <= 0.52: #TODO: add a suitable threshold
+                # keys for DSG-JSON
+                scenario_name_key = self.model.p.name_dsg_scenario
+                location_name_key = self.location['latest_node']
+
+                # TODO: change degree - 1, if agents could also turn around at a node
+                # "-1" because e.g. a node with degree == 3 has 2 outgoing streets (the agent is coming from one route and he cant turn around and go back)
+                degree_key = self.personal_network.nodes[self.metric_path[0]]['degree'] - 1
+
+                # get edge data from the personal network of the agent
+                signs, crowds, distances = self.extract_edge_data()
+
+                # JSON for POST-Request
+                scene_json = {
+                    "scenario_name": scenario_name_key,
+                    "location_name": location_name_key,
+                    "degree": degree_key,
+                    "signs": signs,
+                    "crowds": crowds,
+                    "distances": distances,
+                }
+                # save scene JSON
+                self.model.scene_dictionaries.append(scene_json)
+
             if(ows and record_non_comp_prob):
                 # record compliance and non_compliance probabilities for model output
                 self.non_comp_probs.append(prop_no_deviation)
@@ -452,7 +550,8 @@ class DistanceKeepingModel(ap.Model):
         self.create_graph(streets_gpkg=self.p.streets_path)
         
         """Initialize model variables. """  
-        # Create lists for position and edge data and compliance counter 
+        # Create lists for position and edge data and compliance counter
+        self.scene_dictionaries = []
         self.position_list = []
         self.node_list = []
         self.edge_gdf = []
@@ -633,6 +732,9 @@ class DistanceKeepingModel(ap.Model):
             print(f" absolute non-compliance-probabilities: {len(self.non_comp_probs)}")
             print(f" absolute compliance-probabilities: {len(self.comp_probs)}")
             print(f" absolute NODs: {len(self.NODs)}")
+
+        print(self.scene_dictionaries[:5])
+        print(len(self.scene_dictionaries))
 
             
     def create_graph(self, streets_gpkg):
