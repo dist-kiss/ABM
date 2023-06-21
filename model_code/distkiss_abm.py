@@ -740,7 +740,7 @@ class DistanceKeepingModel(ap.Model):
             self.scene_dictionaries = sorted(self.scene_dictionaries, key=lambda tuple: abs(0.5 - tuple[0]))
             # filter out just the JSON-objects
             # tuple[1] is the json object
-            scene_jsons = [tuple[1] for tuple in self.scene_dictiongitaries]
+            scene_jsons = [tuple[1] for tuple in self.scene_dictionaries]
 
             # http-error only changes if some error occurs
             http_error = False
