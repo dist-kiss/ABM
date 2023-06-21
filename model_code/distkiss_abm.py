@@ -11,6 +11,7 @@ import math
 import numpy as np
 from pathlib import Path
 from shapely.ops import substring, Point, LineString
+import requests
 
 # Custom libs
 import movement
@@ -443,7 +444,6 @@ class Pedestrian(ap.Agent):
         shortest_path_to_dest = nx.dijkstra_path(view, source=current_node, target=self.dest_name,
                                                  weight='mm_len')
         remaining_distance_on_route = nx.path_weight(network, shortest_path_to_dest, weight='mm_len')
-
         # round for better reprensentation in the IVE
         remaining_distance_on_route = round(remaining_distance_on_route)
 
@@ -500,8 +500,8 @@ class Pedestrian(ap.Agent):
                     "crowds": crowds,
                     "distances": distances,
                 }
-                # save scene JSON
-                self.model.scene_dictionaries.append(scene_json)
+                # save scene JSON with the captured probabilty of non-compliance
+                self.model.scene_dictionaries.append((prop_no_deviation, scene_json))
 
             if(ows and record_non_comp_prob):
                 # record compliance and non_compliance probabilities for model output
@@ -731,9 +731,35 @@ class DistanceKeepingModel(ap.Model):
             print(f" absolute non-compliance-probabilities: {len(self.non_comp_probs)}")
             print(f" absolute compliance-probabilities: {len(self.comp_probs)}")
             print(f" absolute NODs: {len(self.NODs)}")
+
         if (self.p.record_situations):
-            print(self.scene_dictionaries[40:45])
-            print(len(self.scene_dictionaries))
+
+            number_of_scenes = self.p.scenes_to_generate
+            # sort scene-dictionaries by probabilities nearest to 50% in ascending order.
+            # tuple[0] is the non-compliance probability
+            self.scene_dictionaries = sorted(self.scene_dictionaries, key=lambda tuple: abs(0.5 - tuple[0]))
+            # filter out just the JSON-objects
+            # tuple[1] is the json object
+            scene_jsons = [tuple[1] for tuple in self.scene_dictiongitaries]
+
+            # http-error only changes if some error occurs
+            http_error = False
+
+            # sends a POST-Request for the first "n" JSON Objects (one per object)
+            # "n" can be defined in the experiment parameters in "run_experiment.py"
+            for json in scene_jsons[:number_of_scenes]:
+                url = "http://giv-sitcomdev.uni-muenster.de:3000/api/scene/"
+                api_response = requests.post(url, json=json)
+                # Some general API-Error handling
+                if not api_response.status_code < 400:
+                    http_error = True
+            # TODO: Add Error handling for specific HTTP-Errors
+            if http_error:
+                print("Some Error has occured!")
+            else:
+                print("Request succesful!")
+
+
 
 
             
