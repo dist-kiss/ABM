@@ -3,8 +3,8 @@ import agentpy as ap
 import time
 
 exp_parameters = {
-    'agents': 400, # number of agents
-    'steps': 720, # number of timesteps (model stops if all agents reached their destination before the amount of steps is reached) 
+    'agents': 100, # number of agents
+    'steps': 360, # number of timesteps (model stops if all agents reached their destination before the amount of steps is reached)
     'duration': 5,
     'streets_path': "../input_data/quakenbrueck_street_width.gpkg",
     # Model weights
@@ -43,10 +43,14 @@ exp_parameters = {
     'edges' : False,
     'destination_log': False,
     'compliance_nodes': False,
-    'max_densities': False,
+    'max_densities': True,
     # Add logs for debugging
     'logging': False,
+
+    # set "True" if you want to capture scenes for the DSG
+    'record_situations': True,
     'name_dsg_scenario': "testname",
+    'scenes_to_generate': 1,
 }
 
 sample = ap.Sample(exp_parameters, randomize=False)
