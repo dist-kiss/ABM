@@ -5,6 +5,7 @@ __pycache__/
 .DS_Store
 /local
 /Experiment
+model_code/Experiment
 .idea/
 _.swp
 /Plots
