@@ -5,7 +5,6 @@ __pycache__/
 .DS_Store
 /local
 /Experiment
-/model_code/sensitivity_data
 .idea/
 _.swp
 /Plots
