@@ -3,14 +3,17 @@ import agentpy as ap
 import time
 import sensitivity_plots as splot
 
-# Model parameters for sensitivity analysis (SA)
+# Before using, please inform yourself about agentpy's sensitivity analysis functions (they use the python library "SALib")
+
+
+# MODEL PARAMETERS FOR SENSITIVITY ANALYSIS (SA)
 sa_parameters = {
-    'agents': 100, # number of agents
-    'steps': 2000, # number of timesteps (model stops if all agents reached their destination before the amount of steps is reached)
-    'duration': 5,
-    'streets_path': "../input_data/quakenbrueck_street_width.gpkg",
-    # For SA set SD values to 0 and only vary mean value -> all agents within one model run will get the same parameters
-    # Range (mean-2*SD, mean+2*SD) is used here.
+    'agents': 10, # number of agents in the model
+    'steps': 200, # number of timesteps (model stops if all agents reached their destination before the amount of steps is reached)
+    'duration': 5, # duration of a timepstep
+    'streets_path': "../input_data/quakenbrueck_street_width.gpkg", # street network of the model
+    # Range (mean-2*SD, mean+2*SD) is used for all "input parameters" of the sensitivity analysis. This is used to draw samples from
+    # with Saltelli' Sampling Method. This data was collected by doing a bootstrap of study data.
     'constant_weight_mean': ap.Range(0.3424823265591154-2*0.4042530941646003, 0.3424823265591154+2*0.4042530941646003),
     'constant_weight_sd': 0,
     'rtd_weight_mean': ap.Range(4.062769564671944-2*1.7983272569373019, 4.062769564671944+2*1.7983272569373019),
@@ -21,7 +24,7 @@ sa_parameters = {
     'walking_speed_std': 0,
     # Density not used as weight so far.
     'weight_density': 0,
-    'seed': 43,
+    'seed': 43, # seed for the RNG used in the model
     'scenario': 'complex_compliance',
     # Choose when to record non compliance probability (basically choose definition of non compliance); Default is True:
     # False = Non compliance is only where agent initially wanted to walk into forbidden one way street
@@ -34,7 +37,7 @@ sa_parameters = {
     'assign_new_destinations': False,
     # Whether only new destinations shall be assigned and previous destination is used as origin
     'reuse_previous_dest_as_orig': False,
-    'epoch_time': int(time.time()),
+    'epoch_time': int(time.time()), # artificial time used to enum outputs
     'origin_destination_pairs': False,
     # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])]),
     # Whether positions, edges and destination should be saved as gpkg files:
@@ -46,22 +49,36 @@ sa_parameters = {
     # Add logs for debugging
     'logging': False,
 }
+# SENSITIVITY ANALYSIS SPECIFIC PARAMETERS
+
+# Runtime increases significantly with larger samplesize.
+# 1024 has proven to achieve proper convergence of the sobol sequence for this model.
+number_of_samples = 1024  # should be choosen as power of 2.
+
+# Defines how often the model-run is repeated with the same saltelli sample.
+# More Iterations haven't shown improved results in the later analysis, so it's set to 1.
+number_of_model_iterations = 1
+
+# name for saving the experiment.
+exp_name = 'SA_Exp_Saltelli'
+
+# ID for the experiment
+exp_id = f'Agents_{sa_parameters[f"agents"]}_Iterations_{number_of_model_iterations}_N_{number_of_samples}'
 
 # Create Saltelli samples
-sample = ap.Sample(
+saltelli_sample = ap.Sample(
     sa_parameters,
-    n=1024,
+    n=number_of_samples,
     method='saltelli',
     calc_second_order=True
 )
 
-
 # Run experiment.
-sa_exp = ap.Experiment(distkiss_abm.DistanceKeepingModel, sample, iterations=1, record=False)
+sa_exp = ap.Experiment(distkiss_abm.DistanceKeepingModel, saltelli_sample, iterations=number_of_model_iterations, record=False)
 results = sa_exp.run(n_jobs=-1, verbose=10)
 
 # Save results to "./sensitivity_data/<exp_name>_<exp_id>" (change exp_id for multiple runs)
-results.save(exp_name='SA_Exp_Saltelli', exp_id="low_0,25_up_1,25_N16_Iter_100", path='sensitivity_data', display=True)
+results.save(exp_name=exp_name, exp_id=exp_id, path='sensitivity_data', display=True)
 
 # Plot histograms of reporters.
 results.reporters.hist()
