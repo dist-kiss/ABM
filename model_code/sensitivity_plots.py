@@ -1,12 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
+
 
 # Function for plotting
 def plot_sobol_all_indices_horizontal(results):
     """ Bar plot of Sobol sensitivity indices. Plots indices of all orders that were calculated"""
 
-    sns.set()
+
     fig, axs = plt.subplots(1, 2, figsize=(8, 4))
     si_list = results.sensitivity.sobol.groupby(by='reporter')
     si_conf_list = results.sensitivity.sobol_conf.groupby(by='reporter')
