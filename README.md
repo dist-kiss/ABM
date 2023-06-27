@@ -3,7 +3,7 @@
 
 ### Brief description of contents
 The model can be found in ```model_code/distkiss_abm.py```. Some functions used in the model are outsourced into other files, these are ```model_code/graph_helpers.py```, ```model_code/movement.py```, ```model_code/spatial_output_creator.py```. There are several files to run the model with different parameter sets and configurations called ```run_[...].py```.
-An animation of the model can be created by runnning ```model_code/graph_helpers.py```. To perform a sensitivity analysis use the script ```model_code/sensitivity.py```. 
+An animation of the model can be created by runnning ```model_code/graph_helpers.py```. To perform a sensitivity analysis use the script ```model_code/run_sensitivity_analysis.py```. 
 
 ### File structure of the repository
 ```
@@ -28,7 +28,8 @@ project
 │   │   run_experiment.py (script to run AgentPy Experiments)
 │   │   run_single_model_run.py (script to run a single model run)
 │   │   run_with_optimal_parameters.py (script to run the model with calibrated parameter set)
-│   │   sensitivity.py (script to run model & execute sensitivity analysis)
+│   │   run_sensitivity_analysis.py (script to run model & execute sensitivity analysis)
+│   │   load_sensitivity_analysis.py (script to load model output created with "run_sensitivity_analysis.py" & execute sensitivity analysis)
 │   │   sensitivity_plots.py (helper unctions for sensitivity result visualizations)
 │   │   spatial_output_creator.py (helper functions for saving model outputs)
 │
@@ -66,7 +67,28 @@ There are several files that can be used to run the model for different purposes
 mean normalized oberserved detour, std of normalized oberserved detour, variance of normalized oberserved detour, mean non-compliance probability, std of non-compliance probability, variance of non-compliance probability, mean compliance probability, std of compliance probability, number of non-compliances, number of compliances, number of no-route-changes, number of random-reroutings, Array of shortest path lengths, Array of total path legngths, Array of normalized observed detours, Array of non-compliance probabilities, Array of compliance probabilities
 ```
 
-5. **sensitivity.py** This script runs a sensitivity analysis for the model. Default number of agent is 1000 and timesteps are 2000 (~2.7 hours). Unlike in other model runs, weights for compliance function and walking speed is fixed for all agents within a model run. The model is run multiple times systematically varying the parameters. Sample size can be adjusted. Default is 8 (which should be too low to produce valid sensitivity indices!). Default setting is to run each parameter combination for 30 iterations. 
+5. **run_sensitivity_analysis.py**
+This script runs a sensitivity analysis for the model. 
+Change the parameter dictionary "sa_parameters" to create different samples and use these samples to run the model. 
+With the so created model-outputs, later the sensitivity analysis is performed. 
+Unlike in other model runs, weights for the compliance function and walking speed are drawn from this range:<br/><br/> 
+   
+    **range(mean of the parameter - (2 * SD of the parameter), mean of the parameter + (2 * SD of the parameter))**  
+<br/>
+    This is done to get an evenly distributed parameter space for the later sample creation.
+    The model is run multiple times systematically varying the parameters by inputing a different sample.
+    Sample size "N" can be adjusted. This results in a better convergenece of the Sobol' Sequence which improves the sample
+    data quality, but also increasing the runtime significantly. The default is 1024 for this model. 
+
+    Runtime varies heavily depending on the specifications of your machine, so an estimation of the runtime can't be given.
+    
+    After calculating the Sobol' Indices you can plot the results with the functions provided in "sensitivity_plots.py".    
+
+    For further information on this topic, please consider:
+     - [SALib](https://salib.readthedocs.io/en/latest/index.html)
+     - [Agentpy](https://agentpy.readthedocs.io/en/latest/reference_data.html?highlight=sobol)
+
+
 
 
 ### OUTDATED DESCRIPTION:
