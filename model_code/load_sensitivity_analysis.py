@@ -12,5 +12,6 @@ if __name__ == "__main__":
     sob_results = results.calc_sobol(reporters=['mean_non_comp_prob', 'mean_nod'])
 
     # Plot sensitivity results as barchart.
-    splot.plot_sobol_all_indices_horizontal(sob_results)
-    # splot.plot_vertical_barchart(sob_results)
+    #splot.plot_sobol_all_indices_horizontal(sob_results)
+    splot.plot_horizontal_stacked_barchart(sob_results)
+

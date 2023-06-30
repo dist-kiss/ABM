@@ -42,12 +42,15 @@ def get_data_from_DataDict(datadict, get_second_order_data=False):
     for percentage in df_mean_non_comp_prob:
         contribution_to_variance_in_mean_non_comp_prob.append(percentage)
 
+    alpha = chr(945)
+    beta = chr(946)
+
     # Dictionary of input parameters and their contribution to the variance mean_nod and mean_non_comp_prob. Also used for labeling the bars in the plot
     percentages = {
-        'regression constant': [contribution_to_variance_in_mean_nod[0], contribution_to_variance_in_mean_non_comp_prob[0]],
-        'weight relative-total-detour': [contribution_to_variance_in_mean_nod[1], contribution_to_variance_in_mean_non_comp_prob[1]],
-        'weight oneway-street': [contribution_to_variance_in_mean_nod[2], contribution_to_variance_in_mean_non_comp_prob[2]],
-        'mean walking speed': [contribution_to_variance_in_mean_nod[3], contribution_to_variance_in_mean_non_comp_prob[3]],
+        f'{alpha}': [contribution_to_variance_in_mean_nod[0], contribution_to_variance_in_mean_non_comp_prob[0]], # 'regression constant'
+        f'{beta}_rtd': [contribution_to_variance_in_mean_nod[1], contribution_to_variance_in_mean_non_comp_prob[1]], # 'weight relative-total-detour'
+        f'{beta}_forbidden': [contribution_to_variance_in_mean_nod[2], contribution_to_variance_in_mean_non_comp_prob[2]], # 'weight oneway-street'
+        'ws': [contribution_to_variance_in_mean_nod[3], contribution_to_variance_in_mean_non_comp_prob[3]], # 'mean walking speed'
     }
 
     # Add second-order indice data to percentages dict
@@ -68,7 +71,7 @@ def plot_vertical_stacked_barchart(results,print_second_order_indices=False):
     percentages = get_data_from_DataDict(results, print_second_order_indices)
 
     fig, ax = plt.subplots(figsize=(2, 2), dpi=250)
-    output_parameters = ('mean\n normalised\n observed detour', 'mean\n non compliance\n probability')
+    output_parameters = ('mean\n normalised\n detour', 'mean\n non compliance\n probability')
 
     # create array of 0 to store the different layers in the bars
     bottom = np.zeros(len(output_parameters))
@@ -111,7 +114,7 @@ def plot_horizontal_stacked_barchart(results, print_second_order_indices=False):
     percentages = get_data_from_DataDict(results, print_second_order_indices)
 
     fig, ax = plt.subplots(figsize=(5.9, 2.5), dpi=250)
-    output_parameters = ('mean\n normalised\n observed detour', 'mean\n non compliance\n probability')
+    output_parameters = ('mean\n normalised\n detour', 'mean\n non compliance\n probability')
 
     # create array of 0 to store the different layers in the bars
     left = np.zeros(len(output_parameters))
