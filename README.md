@@ -31,6 +31,7 @@ project
 │   │   sensitivity.py (script to run model & execute sensitivity analysis)
 │   │   sensitivity_plots.py (helper unctions for sensitivity result visualizations)
 │   │   spatial_output_creator.py (helper functions for saving model outputs)
+|   |   dsg_scenes.py (helper functions for gathering data for POST-REQ to the DSG) 
 │
 └───postprocessing
 │   │   avg_max_densities.py
@@ -68,6 +69,22 @@ mean normalized oberserved detour, std of normalized oberserved detour, variance
 
 5. **sensitivity.py** This script runs a sensitivity analysis for the model. Default number of agent is 1000 and timesteps are 2000 (~2.7 hours). Unlike in other model runs, weights for compliance function and walking speed is fixed for all agents within a model run. The model is run multiple times systematically varying the parameters. Sample size can be adjusted. Default is 8 (which should be too low to produce valid sensitivity indices!). Default setting is to run each parameter combination for 30 iterations. 
 
+### Extracting Scenes to the Dynamic Scene Generator (DSG)
+
+The model offers the possibility to extract data from situations, when an agent in the model has to decide, whether he wants to reroute or not. This situations are only captured if the probability to stay on the current path ("prop_no_deviate") are inside a specified interval (in our case between 48% and 52%). This interval should be changed, depending on want situations you are interested to capture. Such a situation can occur on an intersection in the street-network.
+A Intersection is always related to a node in the graph of the model. The following situations are currently captured in this model:
+- Agents that deviate from their current path
+- Agents that want to deviate from their current path but then realizing they  would have to move through an street intervention, resulting in rethinking their decision (thus a new probability is calculated)
+- Agents that randomly reroute
+- Agents that turn around at an intersection (taking the path they came from). This situation is identical to the first mentioned situation.
+
+In this situations the model captures the following data:
+- distance of each path going out from that intersection, from the node to the destination of the agent
+- streetsign assigned to each edge of the node
+- crowdedness of each edge of the node
+- degree of the node
+
+All this data is then summarized in a JSON-Object. These Objects can then be send to the [DSG](https://github.com/dist-kiss/dynamic_scene_generator). To decide how many situations should be send, you can change the "scenes_to_generate" parameter in the parameter dictionary in "run_experiment.py".
 
 ### OUTDATED DESCRIPTION:
 The model includes a street network of the city Quakenbrueck located in Lower Saxony, Germany. Several agents are created at setup. 
