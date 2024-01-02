@@ -1,0 +1,11 @@
+name: dist-kiss-new
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - momepy
+  - geopandas
+  - shapely
+  - python=3.9.7
+  - pip
+prefix: /Users/bkaric/opt/anaconda3/envs/dist-kiss-new
