@@ -105,9 +105,10 @@ def write_to_gpk(outfile, infile, density_stats):
     gdf["median_max_density"] = medians
     gdf["std_max_density"] = stds
     gdf.to_file(outfile, driver="GPKG", overwrite=True)
+    return max(gdf['avg_max_density']), max(gdf['median_max_density']), max(gdf['std_max_density'])
 
 # text = input("Please enter file path: ")
-text = "Experiment/output/1675423435"
+text = "Experiment/output/1683635583"
 
 no_comp_files = list()
 full_comp_files = list()
@@ -127,20 +128,20 @@ Path("%s/averages/" % text).mkdir(parents=True, exist_ok=True)
 # no compliance
 no_comp_dict = sort_by_street(no_comp_files)
 plot_distributions(no_comp_dict, "No interventions", 42)
-# no_comp_stats = calc_stats_by_street(no_comp_dict)
-# write_to_gpk("%s/averages/out_no_comp.gpgk" % text, no_comp_files[0], no_comp_stats)
+no_comp_stats = calc_stats_by_street(no_comp_dict)
+no_max_mean, no_max_median, no_max_std = write_to_gpk("%s/averages/out_no_comp.gpgk" % text, no_comp_files[0], no_comp_stats)
 # full compliance
 full_comp_dict = sort_by_street(full_comp_files)
 plot_distributions(full_comp_dict, "Full Compliance", 42)
-# full_comp_stats = calc_stats_by_street(full_comp_dict)
-# write_to_gpk("%s/averages/out_full_comp.gpgk" % text, full_comp_files[0], full_comp_stats)
+full_comp_stats = calc_stats_by_street(full_comp_dict)
+full_max_mean, full_max_median, full_max_std = write_to_gpk("%s/averages/out_full_comp.gpgk" % text, full_comp_files[0], full_comp_stats)
 # calibrated compliance
 cali_comp_dict = sort_by_street(cali_comp_files)
 plot_distributions(cali_comp_dict, "Calibrated Compliance", 42)
-# cali_comp_stats = calc_stats_by_street(cali_comp_dict)
-# write_to_gpk("%s/averages/out_cali_comp.gpgk" % text, cali_comp_files[0], cali_comp_stats)
+cali_comp_stats = calc_stats_by_street(cali_comp_dict)
+cali_max_mean, cali_max_median, cali_max_std = write_to_gpk("%s/averages/out_cali_comp.gpgk" % text, cali_comp_files[0], cali_comp_stats)
 
-def plot_maps(file_names):
+def plot_maps(file_names, max_mean, max_median, max_std):
     f, axs = plt.subplots(len(file_names),3,figsize=(10, 10))
     # getting the original colormap using cm.get_cmap() function
     orig_map=plt.cm.get_cmap('magma')    
@@ -156,23 +157,26 @@ def plot_maps(file_names):
 
     for index, file in enumerate(file_names):
         gdf = geopandas.read_file(file)
-        gdf.plot(ax=axs[index, 0], column='avg_max_density', legend=True, cmap=reversed_map, vmin=0, vmax=0.6)
+        gdf.plot(ax=axs[index, 0], column='avg_max_density', legend=True, cmap=reversed_map, vmin=0, vmax=max_mean)
         axs[index, 0].legend()
         axs[index, 0].set_xticks([])
         axs[index, 0].set_yticks([])
 
-        gdf.plot(ax=axs[index, 1], column='median_max_density', legend=True, cmap=reversed_map, vmin=0, vmax=0.6)
+        gdf.plot(ax=axs[index, 1], column='median_max_density', legend=True, cmap=reversed_map, vmin=0, vmax=max_median)
         axs[index, 1].legend()
         axs[index, 1].set_xticks([])
         axs[index, 1].set_yticks([])
 
-        gdf.plot(ax=axs[index, 2], column='std_max_density', legend=True, cmap=reversed_map, vmin=0, vmax=0.1)
+        gdf.plot(ax=axs[index, 2], column='std_max_density', legend=True, cmap=reversed_map, vmin=0, vmax=max_std)
         axs[index, 2].legend()
         axs[index, 2].set_xticks([])
         axs[index, 2].set_yticks([])
 
         f.suptitle('Maximum density values per street per model run', fontsize=16)
     plt.show()
-plot_maps(["%s/averages/out_no_comp.gpgk" % text,"%s/averages/out_full_comp.gpgk" % text,"%s/averages/out_cali_comp.gpgk" % text])
+max_mean = max(no_max_mean, full_max_mean, cali_max_mean)
+max_median = max(no_max_median, full_max_median, cali_max_median)
+max_std = max(no_max_std, full_max_std, cali_max_std)
+plot_maps(["%s/averages/out_no_comp.gpgk" % text,"%s/averages/out_full_comp.gpgk" % text,"%s/averages/out_cali_comp.gpgk" % text], max_mean, max_median, max_std)
 
 print("done")

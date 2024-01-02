@@ -68,18 +68,16 @@ def calc_stats_by_street(street_dict):
 
 def plot_distributions(street_dicts, scenario_strs, seed):
     random.seed(seed)
-    rndm_keys = random.sample(list(street_dicts[0]), 5)
+    # rndm_keys = random.sample(list(street_dicts[0]), 5)
+    rndm_keys = list([35,42,46,52,58])
     bins3=np.arange(0,0.5,0.01)
     # f, axs = plt.subplots(3,5,figsize=(10, 10))
     f = plt.figure(constrained_layout=True)
     f.suptitle('Histograms of all densities (nine random streets)')
     subfigs = f.subfigures(nrows=3, ncols=1)
+    
+    all_dens = []
     for row, subfig in enumerate(subfigs):
-        subfig.suptitle(scenario_strs[row])
-
-        # create 1x3 subplots per subfig
-        axs = subfig.subplots(nrows=1, ncols=5)
-        # oragnize data:
         density_stats = {}
         for key in street_dicts[row]:
             df = pd.DataFrame(street_dicts[row][key])
@@ -88,9 +86,25 @@ def plot_distributions(street_dicts, scenario_strs, seed):
                 densities.append(x['density'])
             density_stats[key] = densities    
         values = [density_stats[k] for k in rndm_keys]
+        all_dens.append(values)
 
+    for row, subfig in enumerate(subfigs):
+        subfig.suptitle(scenario_strs[row])
+
+        # create 1x3 subplots per subfig
+        axs = subfig.subplots(nrows=1, ncols=5)
+        # oragnize data:
+        # density_stats = {}
+        # for key in street_dicts[row]:
+        #     df = pd.DataFrame(street_dicts[row][key])
+        #     densities = []
+        #     for x in df.properties:
+        #         densities.append(x['density'])
+        #     density_stats[key] = densities    
+        # values = [density_stats[k] for k in rndm_keys]
         for col, ax in enumerate(axs):
-            ax.hist(values[col], bins=bins3, density=True)
+            bins = np.histogram(np.hstack((all_dens[0][col],all_dens[1][col], all_dens[2][col])), bins=20)[1]
+            ax.hist(all_dens[row][col], bins=bins, density=True, log=True)
             ax.set_title('Street ID: ' + str(rndm_keys[col]))
             # ax.set_ylim([0, 600])
             # ax.set_title(f'Plot title {col}')
@@ -119,7 +133,7 @@ def write_to_gpk(outfile, infile, density_stats):
     gdf.to_file(outfile, driver="GPKG")
 
 # text = input("Please enter file path: ")
-text = "Experiment/output/1675423435"
+text = "Experiment/output/1683635583"
 
 no_comp_files = list()
 full_comp_files = list()

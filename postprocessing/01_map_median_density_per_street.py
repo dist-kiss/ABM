@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 import random
 import numpy as np
 import scipy.stats as st
+import seaborn as sns
+
 
 
 
@@ -95,7 +97,7 @@ def plot_distributions(street_dicts, scenario_strs, seed):
             # ax.set_title(f'Plot title {col}')
     f.suptitle(f'Histograms of all densities ({len(rndm_keys)} random streets)', fontsize=16)
     plt.show()
-        
+
 
 def write_to_gpk(outfile, infile, density_stats):
     """ Takes dict with mean, median and std of max_density for each ID and geopackage file with same IDs
@@ -119,9 +121,75 @@ def write_to_gpk(outfile, infile, density_stats):
     gdf["std_density"] = stds
     gdf["95th_percentile"] = perc95s
     gdf.to_file(outfile, driver="GPKG")
+    return max(gdf['mean_density']), max(gdf['median_density']), max(gdf['std_density']), max(gdf['95th_percentile']), min(gdf['mean_density']), min(gdf['median_density']), min(gdf['std_density']), min(gdf['95th_percentile'])
+
+def plot_maps(file_names, outnames):
+    ymax_mean = 0
+    ymax_median = 0
+    ymax_std = 0
+    ymax_95th = 0
+    for file in file_names:
+        gdf = geopandas.read_file(file)
+        max_gdf = gdf.max()
+        ymax_mean = max(ymax_mean,max_gdf.mean_density)
+        ymax_median = max(ymax_median,max_gdf.median_density)
+        ymax_std = max(ymax_std,max_gdf.std_density)
+        ymax_95th = max(ymax_95th,max_gdf['95th_percentile'])
+
+    sns.set()
+    f, ax = plt.subplots(figsize=(6, 4))
+    # getting the original colormap using cm.get_cmap() function
+    orig_map=plt.cm.get_cmap('magma')    
+    # reversing the original colormap using reversed() function
+    reversed_map = orig_map.reversed()
+    
+    gdf = geopandas.read_file(file_names[0])
+    gdf.plot(ax=ax, column='mean_density', legend=True, legend_kwds={"label": "people / $m^2$", "orientation": "vertical"}, cmap=reversed_map, vmin=0, vmax=ymax_mean, linewidth=3)
+    # ax.set_ylabel("Crowdedness in people / $m^2$")
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    plt.savefig("%s/differences/" % text + "base_map" + ".pdf", bbox_inches='tight')
+    plt.show()
+
+    f, axs = plt.subplots(len(file_names),4,figsize=(15, 10))
+    cols = ['{}'.format(col) for col in ['Mean', 'Median', 'Standard deviation', '95th percentile']]
+    rows = ['{}'.format(row) for row in outnames]
+    for ax, col in zip(axs[0], cols):
+        ax.set_title(col)
+
+    for ax, row in zip(axs[:,0], rows):
+        ax.set_ylabel(row, rotation=90, size='large')
+
+    for index, file in enumerate(file_names):
+        gdf = geopandas.read_file(file)
+        gdf.plot(ax=axs[index, 0], column='mean_density', legend=True, cmap=reversed_map, vmin=0, vmax=ymax_mean)
+        # axs[index, 0].legend()
+        axs[index, 0].set_xticks([])
+        axs[index, 0].set_yticks([])
+
+        gdf.plot(ax=axs[index, 1], column='median_density', legend=True, cmap=reversed_map, vmin=0, vmax=ymax_median)
+        # axs[index, 1].legend()
+        axs[index, 1].set_xticks([])
+        axs[index, 1].set_yticks([])
+
+        gdf.plot(ax=axs[index, 2], column='std_density', legend=True, cmap=reversed_map, vmin=0, vmax=ymax_std)
+        # axs[index, 2].legend()
+        axs[index, 2].set_xticks([])
+        axs[index, 2].set_yticks([])
+
+        gdf.plot(ax=axs[index, 3], column='95th_percentile', legend=True, cmap=reversed_map, vmin=0, vmax=ymax_95th)
+        # axs[index, 3].legend()
+        axs[index, 3].set_xticks([])
+        axs[index, 3].set_yticks([])
+    plt.savefig("%s/averages/map_densities.pdf" % text, bbox_inches='tight')
+    plt.savefig("%s/averages/map_densities.png" % text, bbox_inches='tight')
+    # plt.show()
 
 # text = input("Please enter file path: ")
-text = "Experiment/output/1677443804"
+text = "Experiment/output/1683637657"
+outnames = ['stats_by_street_no_interv', 'stats_by_street_full_comp', 'stats_by_street_cali_comp']
+# outnames = ['4_ows', '10_ows']
 
 no_comp_files = list()
 full_comp_files = list()
@@ -145,67 +213,28 @@ Path("%s/averages/" % text).mkdir(parents=True, exist_ok=True)
 # no compliance
 no_comp_dict = sort_by_street(no_comp_files)
 no_comp_stats = calc_stats_by_street(no_comp_dict)
-write_to_gpk("%s/averages/stats_by_street_no_interv.gpgk" % text, max_density_files[0], no_comp_stats)
+no_max_mean, no_max_median, no_max_std, no_max_95, no_min_mean, no_min_median, no_min_std, no_min_95 = write_to_gpk(text + "/averages/stats_by_street_" + outnames[0] + ".gpgk", max_density_files[0], no_comp_stats)
 # full compliance
 full_comp_dict = sort_by_street(full_comp_files)
 full_comp_stats = calc_stats_by_street(full_comp_dict)
-write_to_gpk("%s/averages/stats_by_street_full_comp.gpgk" % text, max_density_files[0], full_comp_stats)
+full_max_mean, full_max_median, full_max_std, full_max_95, full_min_mean, full_min_median, full_min_std, full_min_95 = write_to_gpk(text + "/averages/stats_by_street_" + outnames[1] + ".gpgk", max_density_files[0], full_comp_stats)
 # calibrated compliance
-cali_comp_dict = sort_by_street(cali_comp_files)
-cali_comp_stats = calc_stats_by_street(cali_comp_dict)
-write_to_gpk("%s/averages/stats_by_street_cali_comp.gpgk" % text, max_density_files[0], cali_comp_stats)
+if len(cali_comp_files) > 0:
+    cali_comp_dict = sort_by_street(cali_comp_files)
+    cali_comp_stats = calc_stats_by_street(cali_comp_dict)
+    cali_max_mean, cali_max_median, cali_max_std, cali_max_95, cali_min_mean, cali_min_median, cali_min_std, cali_min_95 = write_to_gpk(text + "/averages/stats_by_street_" + outnames[2] + ".gpgk", max_density_files[0], cali_comp_stats)
 
+# max_mean = max(full_max_mean, no_max_mean, cali_max_mean)
+# max_median = max(full_max_median, no_max_median, cali_max_median)
+# max_std = max(full_max_std, no_max_std, cali_max_std)
+# max_95 = max(full_max_95, no_max_95, cali_max_95)
+# min_mean = min(full_min_mean, no_min_mean, cali_min_mean)
+# min_median = min(full_min_median, no_min_median, cali_min_median)
+# min_std = min(full_min_std, no_min_std, cali_min_std)
+# min_95 = min(full_min_95, no_min_95, cali_min_95)
 
-def plot_maps(file_names):
-    ymax_mean = 0
-    ymax_median = 0
-    ymax_std = 0
-    ymax_95th = 0
-    for file in file_names:
-        gdf = geopandas.read_file(file)
-        max_gdf = gdf.max()
-        ymax_mean = max(ymax_mean,max_gdf.mean_density)
-        ymax_median = max(ymax_median,max_gdf.median_density)
-        ymax_std = max(ymax_std,max_gdf.std_density)
-        ymax_95th = max(ymax_95th,max_gdf['95th_percentile'])
-
-    f, axs = plt.subplots(len(file_names),4,figsize=(10, 10))
-    # getting the original colormap using cm.get_cmap() function
-    orig_map=plt.cm.get_cmap('magma')    
-    # reversing the original colormap using reversed() function
-    reversed_map = orig_map.reversed()
-    cols = ['{}'.format(col) for col in ['Mean', 'Median', 'Standard deviation', '95th percentile']]
-    rows = ['{}'.format(row) for row in ['No interventions', 'Full compliance', 'Calibrated compliance']]
-    for ax, col in zip(axs[0], cols):
-        ax.set_title(col)
-
-    for ax, row in zip(axs[:,0], rows):
-        ax.set_ylabel(row, rotation=90, size='large')
-
-    for index, file in enumerate(file_names):
-        gdf = geopandas.read_file(file)
-        gdf.plot(ax=axs[index, 0], column='mean_density', legend=True, cmap=reversed_map, vmin=0, vmax=ymax_mean)
-        axs[index, 0].legend()
-        axs[index, 0].set_xticks([])
-        axs[index, 0].set_yticks([])
-
-        gdf.plot(ax=axs[index, 1], column='median_density', legend=True, cmap=reversed_map, vmin=0, vmax=ymax_median)
-        axs[index, 1].legend()
-        axs[index, 1].set_xticks([])
-        axs[index, 1].set_yticks([])
-
-        gdf.plot(ax=axs[index, 2], column='std_density', legend=True, cmap=reversed_map, vmin=0, vmax=ymax_std)
-        axs[index, 2].legend()
-        axs[index, 2].set_xticks([])
-        axs[index, 2].set_yticks([])
-
-        gdf.plot(ax=axs[index, 3], column='95th_percentile', legend=True, cmap=reversed_map, vmin=0, vmax=ymax_95th)
-        axs[index, 3].legend()
-        axs[index, 3].set_xticks([])
-        axs[index, 3].set_yticks([])
-    plt.show()
-
-plot_maps(["%s/averages/stats_by_street_no_interv.gpgk" % text,"%s/averages/stats_by_street_full_comp.gpgk" % text,"%s/averages/stats_by_street_cali_comp.gpgk" % text])
+plot_maps([text + "/averages/stats_by_street_" + outnames[0] + ".gpgk", text + "/averages/stats_by_street_" + outnames[1] + ".gpgk" , text + "/averages/stats_by_street_" + outnames[2] + ".gpgk"], outnames)
+# plot_maps([text + "/averages/stats_by_street_" + outnames[0] + ".gpgk", text + "/averages/stats_by_street_" + outnames[1] + ".gpgk"], outnames)
 
 
 print("done")
