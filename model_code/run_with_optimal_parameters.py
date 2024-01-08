@@ -6,7 +6,7 @@ optimal_parameters = {
     'agents': 2000,
     'steps': 720,
     'duration': 5,
-    'streets_path': "../input_data/quakenbrueck_street_width.gpkg",
+    'streets_path': "input_data/quakenbrueck_street_width_8_ows.gpkg",
     'constant_weight_mean': 0.3424823265591154,
     'constant_weight_sd': 0.4042530941646003,
     'rtd_weight_mean': 4.062769564671944, 
@@ -18,7 +18,7 @@ optimal_parameters = {
     # Density not used as weight so far.
     'weight_density': 0,
     'seed': 43,
-    'epoch_time': int(time.time()),
+    'out_name': int(time.time()),
     # Choose value from ['no_interventions', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
     # Scenario 1: 'no_interventions' = Agents behave like there are no measures 
     # Scenario 2: 'simple_compliance' = Agents comply with every measure

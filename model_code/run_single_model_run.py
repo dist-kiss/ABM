@@ -6,7 +6,7 @@ parameters = {
     'agents': 100, # number of agents 
     'steps': 720, # number of timesteps (model stops if all agents reached their destination before the amount of steps is reached) 
     'duration': 5,
-    'streets_path': "../input_data/quakenbrueck_street_width.gpkg",
+    'streets_path': "input_data/quakenbrueck_street_width_8_ows.gpkg",
     # Model weights
     'constant_weight_mean': 0.3424823265591154,
     'constant_weight_sd': 0.4042530941646003,
@@ -19,7 +19,7 @@ parameters = {
     # Density not used as weight so far.
     'weight_density': 0,
     'seed': 43,
-    'epoch_time': int(time.time()),
+    'out_name': int(time.time()),
     # Choose value from ['no_interventions', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
     # Scenario 1: 'no_interventions' = Agents behave like there are no measures 
     # Scenario 2: 'simple_compliance' = Agents comply with every measure

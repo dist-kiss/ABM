@@ -13,7 +13,7 @@ if __name__ == "__main__":
         'steps': 2000,
         # number of timesteps (model stops if all agents reached their destination before the amount of steps is reached)
         'duration': 5,  # duration of a timepstep
-        'streets_path': "../input_data/quakenbrueck_street_width.gpkg",  # street network of the model
+        'streets_path': "input_data/quakenbrueck_street_width_8_ows.gpkg",  # street network of the model
         # Range (mean-2*SD, mean+2*SD) is used for all "input parameters" of the sensitivity analysis. This is used to draw samples from
         # with Saltelli' Sampling Method. This data was collected by doing a bootstrap of study data.
         'constant_weight_mean': ap.Range(0.3424823265591154 - 2 * 0.4042530941646003,
