@@ -42,7 +42,7 @@ if __name__ == "__main__":
         'assign_new_destinations': False,
         # Whether only new destinations shall be assigned and previous destination is used as origin
         'reuse_previous_dest_as_orig': False,
-        'epoch_time': int(time.time()),  # artificial time used to enum outputs
+        'out_name': int(time.time()),  # artificial time used to enum outputs
         'origin_destination_pairs': False,
         # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])]),
         # Whether positions, edges and destination should be saved as gpkg files:

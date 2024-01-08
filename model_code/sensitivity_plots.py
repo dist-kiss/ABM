@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path
 
 
 # Function for plotting
@@ -103,7 +104,8 @@ def plot_vertical_stacked_barchart(results,print_second_order_indices=False):
 
     plt.tight_layout()
     plt.show()
-    fig.savefig("..\Plots\\vertical_barchart_sobol_indices.pdf", dpi=250, bbox_inches='tight')
+    Path("Plots/").mkdir(parents=True, exist_ok=True)
+    fig.savefig("Plots/vertical_barchart_sobol_indices.pdf", dpi=250, bbox_inches='tight')
 
 def plot_horizontal_stacked_barchart(results, print_second_order_indices=False):
     # Adjust the code, to create the needed plot
@@ -148,7 +150,8 @@ def plot_horizontal_stacked_barchart(results, print_second_order_indices=False):
     plt.tight_layout()
     #plt.subplots_adjust(bottom=0.4, left=0.292, right=0.962, top=0.912) # make room for legend
     plt.show()
-    fig.savefig("..\Plots\\horizontal_barchart_sobol_indices.pdf", dpi=250, bbox_inches='tight')
+    Path("Plots/").mkdir(parents=True, exist_ok=True)
+    fig.savefig("Plots/horizontal_barchart_sobol_indices.pdf", dpi=250, bbox_inches='tight')
 
 
 

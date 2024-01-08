@@ -5,7 +5,7 @@ import sensitivity_plots as splot
 
 if __name__ == "__main__":
     # load results from "./sensitivity_data/<exp_name>_<exp_id>"
-    results = ap.DataDict.load(exp_name='SA_Exp_Saltelli', exp_id="low_-2sd_up_+2sd_N1024_Iter_1_Agents_100",
+    results = ap.DataDict.load(exp_name='SA_Exp_Saltelli', exp_id="Agents_100_Iterations_1_N_1024",
                                path='sensitivity_data', display=True)
 
     # Calculate sobol indices on a given set of output metrics
