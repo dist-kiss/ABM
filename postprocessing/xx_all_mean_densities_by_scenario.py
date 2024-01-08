@@ -15,7 +15,7 @@ import seaborn as sns
 
 
 
-def sort_by_street(input_file, out_name):
+def sort_by_street(input_file, output_name):
     """ Takes several spatial vector files with the same spatial features and returns a dict, that groups features by ID.
         Returns:
             Dict {
@@ -43,7 +43,7 @@ def sort_by_street(input_file, out_name):
             # dict[feat['properties']['ID']].append(feat)
     all_dens = pd.DataFrame(density_list, columns=['ID','density'])
     # .set_index(['ID'])
-    all_dens.to_csv(out_name, index=False)
+    all_dens.to_csv(output_name, index=False)
     # json.dump(dict, open(out_name,'w'))
     return all_dens
 
@@ -177,8 +177,8 @@ def plot_overall_distributions(street_dict, scenario_str, xmax=1,ymax=125000):
     plt.ylim(0, ymax)
     plt.ylabel("Frequency")
     plt.xlabel("Crowdedness in people / m^2")
-    plt.savefig("%s/averages/fixed_x_y_bins_0_005_outline_hists.pdf" % text, bbox_inches='tight')
-    plt.savefig("%s/averages/overlay_hists.png" % text, bbox_inches='tight')
+    plt.savefig("%s/averages/fixed_x_y_bins_0_005_outline_hists.pdf" % target_folder, bbox_inches='tight')
+    plt.savefig("%s/averages/overlay_hists.png" % target_folder, bbox_inches='tight')
     plt.show()
 
     # f = plt.figure()
@@ -210,7 +210,7 @@ def write_to_gpk(outfile, infile, density_stats):
     gdf.to_file(outfile, driver="GPKG")
 
 def plot_boxplots(street_dict, scenario_str, ax, i):
-    Path("%s/boxplots/" % text).mkdir(parents=True, exist_ok=True)
+    # Path("%s/boxplots/" % target_folder).mkdir(parents=True, exist_ok=True)
     # sns.set()
     # f, ax = plt.subplots()
     # all_dens = []
@@ -244,33 +244,34 @@ sns.set()
 f, axs = plt.subplots(1,3,sharey=False, figsize=(12, 4))
 
 for index, i in enumerate(ids, start=0):
-    text = "Experiment/output/" + i
-    no_comp_dict_path = "%s/averages/no_comp_dict.csv" % text
-    full_comp_dict_path = "%s/averages/full_comp_dict.csv" % text
-    cali_4_ows_dict_path = "%s/averages/cali_4_ows_dict.csv" % text
-    cali_8_ows_dict_path = "%s/averages/cali_8_ows_dict.csv" % text
-    cali_10_ows_dict_path = "%s/averages/cali_10_ows_dict.csv" % text
+    target_folder = "Experiment/output/" + i
+    # Path("%s/" % target_folder).mkdir(parents=True, exist_ok=True)
+    no_comp_dict_path = "%s/averages/no_comp_dict.csv" % target_folder
+    # full_comp_dict_path = "%s/averages/full_comp_dict.csv" % target_folder
+    cali_4_ows_dict_path = "%s/averages/cali_4_ows_dict.csv" % target_folder
+    cali_8_ows_dict_path = "%s/averages/cali_8_ows_dict.csv" % target_folder
+    cali_10_ows_dict_path = "%s/averages/cali_10_ows_dict.csv" % target_folder
     no_comp_files = list()
-    full_comp_files = list()
+    # full_comp_files = list()
     cali_4_ows_files = list()
     cali_8_ows_files = list()
     cali_10_ows_files = list()
-    for (dirpath, dirnames, filenames) in os.walk(text):
+    for (dirpath, dirnames, filenames) in os.walk("Experiment/output/"):
         for file in filenames:
-            if file.startswith("edges_"):
+            if file.startswith("edges_" + str(index)):
                 if file.endswith(".gpkg"):
-                    if dirpath.startswith("Experiment/output/"+ i + "/no_interv"):
+                    if dirpath.startswith("Experiment/output/0_ows"):
                         no_comp_files += [os.path.join(dirpath, file)]
-                    if dirpath.startswith("Experiment/output/"+ i + "/full_com"):
-                        full_comp_files += [os.path.join(dirpath, file)]
-                    if dirpath.startswith("Experiment/output/"+ i + "/cali_4_ows"):
+                    # if dirpath.startswith("Experiment/output/"+ i + "/full_com"):
+                    #     full_comp_files += [os.path.join(dirpath, file)]
+                    if dirpath.startswith("Experiment/output/4_ows"):
                         cali_4_ows_files += [os.path.join(dirpath, file)]
-                    if dirpath.startswith("Experiment/output/"+ i + "/cali_8_ows"):
+                    if dirpath.startswith("Experiment/output/8_ows"):
                         cali_8_ows_files += [os.path.join(dirpath, file)]
-                    if dirpath.startswith("Experiment/output/"+ i + "/cali_10_ows"):
+                    if dirpath.startswith("Experiment/output/10_ows"):
                         cali_10_ows_files += [os.path.join(dirpath, file)]
 
-    Path("%s/averages/" % text).mkdir(parents=True, exist_ok=True)
+    Path("%s/averages/" % target_folder).mkdir(parents=True, exist_ok=True)
 
     # no compliance
     if(os.path.isfile(no_comp_dict_path)):
@@ -278,10 +279,10 @@ for index, i in enumerate(ids, start=0):
     else:
         no_comp_dict = sort_by_street(no_comp_files, no_comp_dict_path)
     # full compliance
-    if(os.path.isfile(full_comp_dict_path)):
-        full_comp_dict = pd.read_csv(full_comp_dict_path)
-    else:
-        full_comp_dict = sort_by_street(full_comp_files, full_comp_dict_path)
+    # if(os.path.isfile(full_comp_dict_path)):
+    #     full_comp_dict = pd.read_csv(full_comp_dict_path)
+    # else:
+    #     full_comp_dict = sort_by_street(full_comp_files, full_comp_dict_path)
     # cali 4 ows compliance
     if(os.path.isfile(cali_4_ows_dict_path)):
         cali_4_ows_dict = pd.read_csv(cali_4_ows_dict_path)
@@ -310,6 +311,7 @@ axs[0].legend(loc='best')
 axs[0].set_ylabel("Pedestrian density in people / m^2") # hide tick and tick label of the big axis
 # plt.tick_params(labelcolor='none', which='both', top=False, bottom=False, left=False, right=False)
 f.tight_layout()
+Path("Experiment/output/boxplot/").mkdir(parents=True, exist_ok=True)
 plt.savefig("Experiment/output/boxplot/violin_plots.png", bbox_inches='tight')
 plt.savefig("Experiment/output/boxplot/violin_plots.pdf", bbox_inches='tight')
 plt.show()
