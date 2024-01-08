@@ -1,12 +1,15 @@
 import distkiss_abm
 import agentpy as ap
 import time
+import os
 
-exp_parameters = {
-    'agents': 100, # number of agents 
+# Scenario 0 - No one-way-streets
+
+parameters = {
+    'agents': ap.Values(2000, 4000, 10000), # number of agents 
     'steps': 720, # number of timesteps (model stops if all agents reached their destination before the amount of steps is reached) 
     'duration': 5,
-    'streets_path': "../input_data/quakenbrueck_street_width.gpkg",
+    'streets_path': 'input_data/quakenbrueck_street_width_8_ows.gpkg',
     # Model weights
     'constant_weight_mean': 0.3424823265591154,
     'constant_weight_sd': 0.4042530941646003,
@@ -19,12 +22,12 @@ exp_parameters = {
     # Density not used as weight so far.
     'weight_density': 0,
     'seed': 43,
-    'epoch_time': int(time.time()),
+    'out_name': int(time.time()),
     # Choose value from ['no_interventions', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
     # Scenario 1: 'no_interventions' = Agents behave like there are no measures 
     # Scenario 2: 'simple_compliance' = Agents comply with every measure
     # Scenario 3: 'complex_compliance' = Agents use complex decision making for compliance with measures
-    'scenario': ap.Values('no_interventions','simple_compliance','complex_compliance'),
+    'scenario': 'complex_compliance',
     # Choose when to record non compliance probability (basically choose definition of non compliance); Default is True:
     # False = Non compliance is only where agent initially wanted to walk into forbidden one way street
     # True = Additionally in situations, in which agent keeps its route doing a second evalutation after initally 
@@ -40,17 +43,17 @@ exp_parameters = {
     # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])]),
     # Whether positions, edges and destination should be saved as gpkg files:
     'positions': False,
-    'edges' : False,
+    'edges' : True,
     'destination_log': False,
     'compliance_nodes': False,
-    'max_densities': False,
+    'max_densities': True,
     # Add logs for debugging
     'logging': False,
 }
 
-sample = ap.Sample(exp_parameters, randomize=False)
+sample = ap.Sample(parameters, randomize=False)
 
 # Perform experiment
-exp = ap.Experiment(distkiss_abm.DistanceKeepingModel, sample, iterations=1, record=True)
-results = exp.run(n_jobs=-1, verbose=10)
-results.save(exp_name='E', exp_id=exp_parameters['epoch_time'], path='Experiment', display=True)
+exp = ap.Experiment(distkiss_abm.DistanceKeepingModel, sample, iterations=2, record=True)
+results = exp.run(n_jobs=6, verbose=100)
+results.save(exp_name='E', exp_id=parameters['out_name'], path='Experiment', display=True)

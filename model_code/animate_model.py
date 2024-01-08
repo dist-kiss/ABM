@@ -38,7 +38,7 @@ anim_parameters = {
     'assign_new_destinations': True,
     # Whether only new destinations shall be assigned and previous destination is used as origin
     'reuse_previous_dest_as_orig': False,
-    'epoch_time': int(time.time()),
+    'out_name': int(time.time()),
     'origin_destination_pairs': False,
     # 'origin_destination_pairs': tuple([tuple([27,9]),tuple([32,27]),tuple([0,39])]),
     # Whether positions, edges and destination should be saved as gpkg files:
@@ -70,7 +70,7 @@ def animation_plot(m, p):
     fig = plt.figure(figsize=(7,7))
     ax = fig.add_subplot(111, projection=projection)
     animation = ap.animate(m(p), fig, ax, animation_plot_single)    
-    with open("../animation_output/Model_%d_Animation.html" % m(p).p.epoch_time, "w") as file:
+    with open("../animation_output/Model_%s_Animation.html" % m(p).p.out_name, "w") as file:
         file.write(animation.to_jshtml(fps=10))
     # return HTML(animation.to_jshtml(fps=20))
 import matplotlib

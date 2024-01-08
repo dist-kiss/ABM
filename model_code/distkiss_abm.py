@@ -605,27 +605,27 @@ class DistanceKeepingModel(ap.Model):
 
         """ Produce spatial output files. """
         # create output directory
-        Path("./Experiment/output/%d" % self.p.epoch_time).mkdir(parents=True, exist_ok=True)
+        Path("./Experiment/output/%s" % self.p.out_name).mkdir(parents=True, exist_ok=True)
         # If not an Experiment set self._run_id object (sampleID and iteration in experiments)
         if(self._run_id == None):
             self._run_id = ["X","X"]
         if(self.p.max_densities):
             # output density maximum per street
-            soc.save_maximum_densities_to_file(self.G, self.max_density, self.p.epoch_time, self._run_id[0], self._run_id[1])    
+            soc.save_maximum_densities_to_file(self.G, self.max_density, self.p.out_name, self._run_id[0], self._run_id[1])    
         if(self.p.positions):
             # output position data as gpkg
-            soc.save_positions_to_file(self.position_list, self.p.epoch_time, self._run_id[0], self._run_id[1])
+            soc.save_positions_to_file(self.position_list, self.p.out_name, self._run_id[0], self._run_id[1])
         if(self.p.edges):
             # output edge data as gpkg
-            soc.save_edges_to_file(self.edge_gdf, self.p.epoch_time, self._run_id[0], self._run_id[1])
+            soc.save_edges_to_file(self.edge_gdf, self.p.out_name, self._run_id[0], self._run_id[1])
         if(self.p.compliance_nodes):
             # output compliance nodes as gpkg
-            soc.save_compliance_nodes_to_file(self.nodes, self.p.epoch_time, self._run_id[0], self._run_id[1])
+            soc.save_compliance_nodes_to_file(self.nodes, self.p.out_name, self._run_id[0], self._run_id[1])
         if(self.p.destination_log):
             for agent in self.agents:
                 self.destination_list.append(agent.destination_dict) # just for bugfixing
             # output destination data as gpkg
-            soc.save_destinations_to_file(self.destination_list, self.p.epoch_time)
+            soc.save_destinations_to_file(self.destination_list, self.p.out_name)
         
         """ Logs for debugging. """
         if (self.p.logging):

@@ -19,7 +19,7 @@ parameters = {
     # Density not used as weight so far.
     'weight_density': 0,
     'seed': 43,
-    'epoch_time': int(time.time()),
+    'out_name': int(time.time()),
     # Choose value from ['no_interventions', 'simple_compliance', 'complex_compliance'] for parameter to decide which scenario to run:
     # Scenario 1: 'no_interventions' = Agents behave like there are no measures 
     # Scenario 2: 'simple_compliance' = Agents comply with every measure
