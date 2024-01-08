@@ -6,7 +6,7 @@ parameters = {
     'agents': 100, # number of agents 
     'steps': 720, # number of timesteps (model stops if all agents reached their destination before the amount of steps is reached) 
     'duration': 5,
-    'streets_path': "../input_data/quakenbrueck_street_width.gpkg",
+    'streets_path': "input_data/quakenbrueck_street_width_8_ows.gpkg",
     # Model weights
     'constant_weight_mean': 0.3424823265591154,
     'constant_weight_sd': 0.4042530941646003,

@@ -6,7 +6,7 @@ optimal_parameters = {
     'agents': 2000,
     'steps': 720,
     'duration': 5,
-    'streets_path': "../input_data/quakenbrueck_street_width.gpkg",
+    'streets_path': "input_data/quakenbrueck_street_width_8_ows.gpkg",
     'constant_weight_mean': 0.3424823265591154,
     'constant_weight_sd': 0.4042530941646003,
     'rtd_weight_mean': 4.062769564671944, 

@@ -2,14 +2,16 @@ import distkiss_abm
 import agentpy as ap
 import numpy as np
 import time
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
+from pathlib import Path
+
 
 #  ------ ANIMATION ------------------------
 anim_parameters = {
     'agents': 50, # number of agents 
     'steps': 720, # number of timesteps (model stops if all agents reached their destination before the amount of steps is reached) 
     'duration': 5,
-    'streets_path': "../input_data/quakenbrueck_street_width.gpkg",
+    'streets_path': "input_data/quakenbrueck_street_width_8_ows.gpkg",
     # Model weights
     'constant_weight_mean': 0.3424823265591154,
     'constant_weight_sd': 0.4042530941646003,
@@ -70,12 +72,11 @@ def animation_plot(m, p):
     fig = plt.figure(figsize=(7,7))
     ax = fig.add_subplot(111, projection=projection)
     animation = ap.animate(m(p), fig, ax, animation_plot_single)    
-    with open("../animation_output/Model_%s_Animation.html" % m(p).p.out_name, "w") as file:
+    with open("animation_output/Model_%s_Animation.html" % m(p).p.out_name, "w") as file:
         file.write(animation.to_jshtml(fps=10))
-    # return HTML(animation.to_jshtml(fps=20))
+
 import matplotlib
 matplotlib.rcParams['animation.embed_limit'] = 2**128
-
-# TO PRODUCE ANIMATION UMCOMMENT THE FOLLOWING LINE:
+Path("animation_output").mkdir(parents=True, exist_ok=True)
 animation_plot(distkiss_abm.DistanceKeepingModel, anim_parameters)
 print("Script completed.")
