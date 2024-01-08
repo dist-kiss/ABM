@@ -1,1 +1,0 @@
-{"model_type": "DistanceKeepingModel", "time_stamp": "2023-03-29 15:48:41.731521", "agentpy_version": "0.1.5", "python_version": "3.7.1", "experiment": true, "scheduled_runs": 10240, "completed": true, "random": true, "record": false, "sample_size": 10240, "iterations": 1, "run_time": "5:45:27.887228"}
